@@ -41,6 +41,12 @@ export type ContextOsConfig = HookConfig & {
   autoRetrieve: boolean;
   /** Characters of retrieved content per prompt. */
   retrieveBudgetChars: number;
+  /**
+   * Compact once the live context holds this many tokens (0 = off). A count,
+   * not a share of the model's window: "big" does not change when the window
+   * does. Default 120000.
+   */
+  compactAtTokens: number;
   /** Write the exact pre-compaction transcript under `.context-os/snapshots/`. */
   snapshot: boolean;
   /** Insert a note into the compacted transcript saying where the full history is. */
@@ -57,6 +63,9 @@ const DEFAULTS = {
   markRemovedCalls: true,
   autoRetrieve: true,
   retrieveBudgetChars: 6000,
+  compactAtTokens: 120_000,
+  /** The percent trigger is off unless set; `compactAtTokens` is the default trigger. */
+  compactAtPercent: 0,
   snapshot: true,
   noteRemoved: true,
 };
@@ -91,10 +100,35 @@ export function resolveContextOsConfig(options: PluginOptions): ContextOsConfig 
         : DEFAULTS.retrieveBudgetChars,
     snapshot: optionBoolean(options, 'snapshot', DEFAULTS.snapshot),
     noteRemoved: optionBoolean(options, 'noteRemoved', DEFAULTS.noteRemoved),
+    compactAtTokens:
+      typeof options['compactAtTokens'] === 'number' && Number.isFinite(options['compactAtTokens'])
+        ? Math.max(0, options['compactAtTokens'])
+        : DEFAULTS.compactAtTokens,
+    compactAtPercent:
+      typeof options['compactAtPercent'] === 'number' && Number.isFinite(options['compactAtPercent'])
+        ? Math.max(0, options['compactAtPercent'])
+        : DEFAULTS.compactAtPercent,
   };
   // Only an explicit threshold overrides the classifier's own calibration.
   if (typeof options['keepThreshold'] !== 'number') delete config.keepThreshold;
   return config;
+}
+
+/**
+ * Whether the live context is big enough to compact: by token count (the
+ * default trigger) or, when enabled, by share of the window. When the host
+ * reports no absolute count, it is derived from the percent and the window.
+ */
+export function shouldCompact(
+  context: { tokens?: number; percent?: number; window?: number },
+  config: Pick<ContextOsConfig, 'compactAtTokens' | 'compactAtPercent'>,
+): boolean {
+  const percent = context.percent ?? 0;
+  const tokens =
+    context.tokens ?? (context.window && context.percent !== undefined ? (context.percent / 100) * context.window : undefined);
+  if (config.compactAtTokens > 0 && tokens !== undefined && tokens >= config.compactAtTokens) return true;
+  if (config.compactAtPercent > 0 && percent >= config.compactAtPercent) return true;
+  return false;
 }
 
 /** The engine's `$.fs` as the archive's file system. */
@@ -518,8 +552,8 @@ export const register: Register = (on: On, options: PluginOptions) => {
     try {
       await $.command.register({
         name: 'context',
-        description: 'Inspect, explain and restore context archived by context-os',
-        argumentHint: '[status|list|why <id>|show <id>|restore <id>|retrieve <query>]',
+        description: 'Context usage, plus what context-os archived: inspect, explain, restore',
+        argumentHint: '[list|why <id>|show <id>|restore <id>|retrieve <query>]',
       });
     } catch (error) {
       try {
@@ -531,16 +565,28 @@ export const register: Register = (on: On, options: PluginOptions) => {
     return next(event);
   });
 
-  on('command.run', { command: 'context' }, async ($, event) => {
+  on('command.run', { command: 'context' }, async ($, event, next) => {
     const sessionId = await $.session.id();
     const archive = new FileArchive(engineFs($), { root: configured.archiveDir });
-    return runContextCommand(event.args, {
+    const ours = await runContextCommand(event.args, {
       sessionId,
       messages: () => $.session.messages(),
       archive,
       last: async () => (await $.store.get(lastKey(sessionId))) as LastCompaction | undefined,
       classifier: classifierName,
     });
+    // Claude Code's own `/context` (the usage grid) keeps working: a bare
+    // `/context` shows it first, with the archive status underneath.
+    if (event.args.trim().length === 0) {
+      try {
+        const builtin = await next(event);
+        const text = [builtin.text, ours.text].filter((part) => part && part.trim().length > 0).join('\n\n');
+        return { ...builtin, text };
+      } catch {
+        return ours;
+      }
+    }
+    return ours;
   });
 
   on('session.compact', async ($, event, next) => {
@@ -656,7 +702,7 @@ export const register: Register = (on: On, options: PluginOptions) => {
     compacting = true;
     try {
       const { context } = await $.session.usage();
-      if ((context.percent ?? 0) >= configured.compactAtPercent) await $.session.compact();
+      if (shouldCompact(context, configured)) await $.session.compact();
     } catch (error) {
       try {
         $.ui.log(`auto-compact skipped (${error instanceof Error ? error.message : String(error)})`);

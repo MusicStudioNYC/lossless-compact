@@ -58,6 +58,13 @@ claude plugin install context-os@context-os
 
 Or from a checkout: `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir .`
 
+Auto-compaction: the plugin asks the host to compact once the live context
+holds `compactAtTokens` tokens (default 120,000 — a count, so "big" does not
+move when the model's window does; `compactAtPercent` is an optional second
+trigger, off by default), and every compaction — yours, Claude Code's own
+near the limit, or the plugin's — goes through the same hook, so none of
+them summarize. `/context` shows the usage.
+
 Without a `TYPESAFE_API_KEY` the plugin runs the local heuristic classifier —
 no network, ~200 ms on a 300k-token transcript. With a key (env var, settings
 `env`, or the plugin's `apiKey` option) it uses Jev. `/compact` and
@@ -69,7 +76,7 @@ something failed.
 ### `/context`
 
 ```
-/context                    status: active tokens, archived tokens, constraints found, last compaction
+/context                    Claude Code's own usage grid, then: active tokens, archived tokens, constraints found, last compaction
 /context list [n]           newest archived records
 /context why <id>           the action and every reason behind it
 /context show <id>          print the exact archived content
@@ -96,7 +103,8 @@ Archive ids appear in the stubs the model sees, e.g.
 | `snapshot` | true | Write the exact pre-compaction transcript to `.context-os/snapshots/` |
 | `noteRemoved` | true | Insert one message into the compacted transcript saying what was removed and where the snapshot, archive and raw session log are |
 | `autoRetrieve` / `retrieveBudgetChars` | true / 6000 | Search the archive before each prompt and hand the model the best exact matches |
-| `compactAtPercent` | 60 | Context usage that triggers auto-compaction |
+| `compactAtTokens` | 120000 | Live context size that triggers auto-compaction (0 = off) |
+| `compactAtPercent` | 0 | Optional second trigger as a share of the model window (0 = off) |
 | `minReductionRatio` | 0.25 | Below this the built-in summary is used instead |
 | `truncateHeadChars` | 300 | Head of a result kept in a stub |
 | `maxStateTokens` / `maxRequestTokens` | 25000 / 30000 | Jev state and request budgets |

@@ -96,11 +96,17 @@
       "description": "Number of newest messages pinned from compaction.",
       "default": 6
     },
+    "compactAtTokens": {
+      "type": "number",
+      "title": "Compact at (tokens)",
+      "description": "Compact once the live context holds this many tokens. A count, not a share of the window. 0 turns it off.",
+      "default": 120000
+    },
     "compactAtPercent": {
       "type": "number",
-      "title": "Compaction percentage",
-      "description": "Context percentage at which turn.complete requests compaction.",
-      "default": 60
+      "title": "Compact at (percent of window)",
+      "description": "Optional second trigger: compact when context usage reaches this percent of the model window. 0 (default) turns it off.",
+      "default": 0
     },
     "minReductionRatio": {
       "type": "number",

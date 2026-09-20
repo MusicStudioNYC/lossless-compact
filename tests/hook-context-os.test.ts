@@ -35,7 +35,8 @@ describe('resolveContextOsConfig', () => {
       sketches: true,
       redact: true,
       markRemovedCalls: true,
-      compactAtPercent: 60,
+      compactAtPercent: 0,
+      compactAtTokens: 120_000,
       minReductionRatio: 0.25,
       model: 'jev-latest',
     });

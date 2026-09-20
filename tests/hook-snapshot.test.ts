@@ -137,3 +137,17 @@ describe('compactionNote / withCompactionNote', () => {
     expect(messages[1]!.role).toBe('user');
   });
 });
+
+describe('shouldCompact', () => {
+  it('triggers on an absolute token count, deriving it from percent and window when needed', async () => {
+    const { shouldCompact } = await import('../hooks/context-os.js');
+    const config = { compactAtTokens: 120_000, compactAtPercent: 0 };
+    expect(shouldCompact({ tokens: 119_999, percent: 60 }, config)).toBe(false);
+    expect(shouldCompact({ tokens: 120_000, percent: 10 }, config)).toBe(true);
+    expect(shouldCompact({ percent: 70, window: 200_000 }, config)).toBe(true);
+    expect(shouldCompact({ percent: 50, window: 200_000 }, config)).toBe(false);
+    expect(shouldCompact({ percent: 95 }, config)).toBe(false);
+    expect(shouldCompact({ percent: 61, tokens: 10 }, { compactAtTokens: 0, compactAtPercent: 60 })).toBe(true);
+    expect(shouldCompact({ percent: 99, tokens: 999_999 }, { compactAtTokens: 0, compactAtPercent: 0 })).toBe(false);
+  });
+});
