@@ -135,11 +135,39 @@ export function shouldCompact(
   config: Pick<LosslessCompactConfig, 'compactAtTokens' | 'compactAtPercent'>,
 ): boolean {
   const percent = context.percent ?? 0;
-  const tokens =
-    context.tokens ?? (context.window && context.percent !== undefined ? (context.percent / 100) * context.window : undefined);
+  const tokens = contextTokens(context);
   if (config.compactAtTokens > 0 && tokens !== undefined && tokens >= config.compactAtTokens) return true;
   if (config.compactAtPercent > 0 && percent >= config.compactAtPercent) return true;
   return false;
+}
+
+/** The live context in tokens: the host's count, or its percent of the window. */
+export function contextTokens(context: { tokens?: number; percent?: number; window?: number }): number | undefined {
+  return context.tokens ?? (context.window && context.percent !== undefined ? (context.percent / 100) * context.window : undefined);
+}
+
+/**
+ * When the auto-compaction fires. A crossing of the threshold fires once: a
+ * compaction that was skipped or fell back leaves the context where it was,
+ * and firing again after every turn would loop. Re-armed once the context has
+ * dropped below the threshold (the compaction worked) or grown by a quarter
+ * since the attempt (there is new material to remove).
+ */
+export class AutoCompactTrigger {
+  private attemptedAt: number | undefined;
+
+  constructor(private readonly config: Pick<LosslessCompactConfig, 'compactAtTokens' | 'compactAtPercent'>) {}
+
+  due(context: { tokens?: number; percent?: number; window?: number }): boolean {
+    if (!shouldCompact(context, this.config)) {
+      this.attemptedAt = undefined;
+      return false;
+    }
+    const tokens = contextTokens(context) ?? 0;
+    if (this.attemptedAt !== undefined && tokens < this.attemptedAt * 1.25) return false;
+    this.attemptedAt = tokens;
+    return true;
+  }
 }
 
 /** The engine's `$.fs` as the archive's file system. */
@@ -168,6 +196,24 @@ export function resolvedClassifierName(
   apiKey: string | undefined,
 ): 'jev' | 'ruleset' {
   return config.classifier === 'auto' ? (apiKey ? 'jev' : 'ruleset') : config.classifier;
+}
+
+/**
+ * One line for a compaction that ran on the ruleset only because no TypeSafe
+ * key was found (`classifier: auto`); a chosen `ruleset` gets none. The
+ * figures are docs/evals.md's: must-keep results left in place verbatim, 3 of
+ * 6 against Jev's 6 of 6, every probe recoverable either way.
+ */
+export function noKeyNotice(
+  config: Pick<LosslessCompactConfig, 'classifier'>,
+  apiKey: string | undefined,
+): string | undefined {
+  if (config.classifier !== 'auto' || apiKey) return undefined;
+  return (
+    'No TypeSafe key found (TYPESAFE_API_KEY, or the plugin\'s apiKey option), so compaction runs the local ruleset: ' +
+    'same archive, everything restorable, about half as good as Jev at keeping must-keep results in place verbatim ' +
+    '(3 of 6 vs 6 of 6 on the eval). Add a key to switch.'
+  );
 }
 
 /** Picks the classifier from the config and whether a key is at hand. */
@@ -345,6 +391,8 @@ export function compactionNote(details: {
   rawLogPath?: string;
   /** True when Claude Code's built-in summary replaced the transcript after all (a fallback). */
   summarized?: boolean;
+  /** `noKeyNotice`: why the ruleset ran, when it ran for want of a key. */
+  classifierNote?: string;
 }): string {
   const { actions, tokens, messages, classifier, ms } = details.report;
   const removed = actions.ARCHIVE_ONLY + actions.KEEP_HEAD_TAIL + actions.RERUN_ON_DEMAND + actions.DROP_REDUNDANT;
@@ -363,6 +411,7 @@ export function compactionNote(details: {
       : `[lossless-compact] This conversation was compacted at ${details.at} (compaction ${details.compactionId}): ${units} were removed from the active context and archived verbatim. Nothing was summarized or paraphrased; user and assistant messages are untouched. If you need any removed message, the full history is on disk:`,
     outcome,
   ];
+  if (details.classifierNote) lines.push(details.classifierNote);
   if (details.snapshotPath) {
     lines.push(`- Exact pre-compaction transcript (JSON array of messages): ${details.snapshotPath} — grep it, or read a slice.`);
   }
@@ -577,6 +626,7 @@ export async function statusText(
   archive: ArchiveStore,
   last: LastCompaction | undefined,
   classifier: string,
+  classifierNote?: string,
 ): Promise<string> {
   const ledger = buildLedger(messages);
   const active = eventTokens(ledger.events);
@@ -587,6 +637,7 @@ export async function statusText(
     `Active context:        ~${formatTokens(active)} tokens (est.), ${messages.length} messages, ${ledger.interactions.size} tool interactions`,
     `Archived this session: ~${formatTokens(stats.tokens)} tokens in ${stats.records} records`,
     `Classifier:            ${last?.report.classifier ?? classifier}${last ? '' : ' (configured)'}`,
+    ...(classifierNote ? [`                       ${classifierNote}`] : []),
     last
       ? `Last compaction:       ${last.at} — ${last.summary}`
       : 'Last compaction:       none yet',
@@ -665,13 +716,16 @@ export async function runContextCommand(
     archive: ArchiveStore;
     last: () => Promise<LastCompaction | undefined>;
     classifier: string;
+    classifierNote?: string;
   },
 ): Promise<{ text: string; context?: string[] }> {
   const [sub = 'status', ...rest] = args.trim().split(/\s+/).filter(Boolean);
   const arg = rest.join(' ');
   switch (sub) {
     case 'status':
-      return { text: await statusText(deps.sessionId, await deps.messages(), deps.archive, await deps.last(), deps.classifier) };
+      return {
+        text: await statusText(deps.sessionId, await deps.messages(), deps.archive, await deps.last(), deps.classifier, deps.classifierNote),
+      };
     case 'list':
       return { text: await listText(deps.archive, deps.sessionId, Math.max(1, Number.parseInt(arg, 10) || 20)) };
     case 'why':
@@ -703,7 +757,103 @@ export async function runContextCommand(
   }
 }
 
+/* ------------------------------------------------------ slash-menu entry */
+
+/**
+ * The VS Code and Cursor extensions fill their slash menu once at startup
+ * from the markdown commands on disk, so `$.command.register`'s `/lossless`
+ * is never in it; `commands/lossless.md` is, as `/lossless-compact:lossless`.
+ * Picking it is a prompt, not a command: `command.run` never fires and the
+ * model reads the file. `skill.prompt` fires as the engine expands it, and
+ * that is where the hook puts the command's real answer in the model's hands.
+ * Typing `/lossless` in full still runs the command directly, no model turn.
+ */
+export const MENU_SKILL = `lossless-compact:${COMMAND}`;
+
+/** Whether a `skill.prompt` is the static menu entry (plugin-qualified, or bare where a host folds the prefix). */
+export function isMenuSkill(skill: string): boolean {
+  return skill === MENU_SKILL || skill === COMMAND;
+}
+
+/**
+ * The arguments the menu entry carried: its body opens with
+ * `/lossless $ARGUMENTS`, which the host substitutes ("" when nothing was
+ * typed; the marker itself on a host that does not substitute).
+ */
+export function menuArgs(text: string): string {
+  const first = (text.split('\n', 1)[0] ?? '').trim();
+  const match = new RegExp(`^/${COMMAND}\\b\\s*(.*)$`).exec(first);
+  const args = (match?.[1] ?? '').trim();
+  return args === '$ARGUMENTS' ? '' : args;
+}
+
+/**
+ * What the model reads in the menu entry's place: the command's answer, to
+ * show verbatim, and after it whatever the command put in the model's context
+ * (a restored record).
+ */
+export function menuPrompt(args: string, answer: { text: string; context?: readonly string[] }): string {
+  const command = `/${COMMAND}${args ? ` ${args}` : ''}`;
+  const lines = [
+    `lossless-compact answered \`${command}\` for this prompt. Show the user the answer between the markers exactly as it is, in one code block, and add nothing else: no tools, no commentary. Anything after the markers is context for you, not for the reply.`,
+    '',
+    '<lossless_answer>',
+    answer.text,
+    '</lossless_answer>',
+  ];
+  if (answer.context && answer.context.length > 0) lines.push('', ...answer.context);
+  return lines.join('\n');
+}
+
 /* ------------------------------------------------------------- register */
+
+/** What `/lossless` needs from the session beyond the engine: the archive's root and the classifier as resolved so far. */
+type CommandState = { archiveDir: string; classifier: string; classifierNote?: string };
+
+/**
+ * `/lossless <args>` answered, for the typed command and for the menu entry
+ * alike. A top-level function: the engine admits `$` only into one of those.
+ */
+async function answerCommand(
+  $: {
+    session: { id: () => Promise<string>; messages: () => Promise<readonly Message[]> };
+    store: { get: (key: string) => Promise<unknown> };
+  } & Parameters<typeof engineFs>[0],
+  args: string,
+  state: CommandState,
+): Promise<{ text: string; context?: string[] }> {
+  const sessionId = await $.session.id();
+  const archive = new FileArchive(engineFs($), { root: state.archiveDir });
+  return runContextCommand(args, {
+    sessionId,
+    messages: () => $.session.messages(),
+    archive,
+    last: async () => (await $.store.get(lastKey(sessionId))) as LastCompaction | undefined,
+    classifier: state.classifier,
+    ...(state.classifierNote ? { classifierNote: state.classifierNote } : {}),
+  });
+}
+
+/**
+ * Starts a compaction the way this host allows: `$.session.compact()` between
+ * turns, or where the host refuses that — the -p/SDK path, which is what the
+ * VS Code and Cursor extensions run a session on ("compaction here runs
+ * inside a turn (a /compact prompt)") — the `/compact` command, queued for
+ * when the session is idle. The same `session.compact` event either way, so
+ * neither summarizes.
+ */
+async function startCompaction($: {
+  session: { compact: () => Promise<unknown> };
+  command: { run: (args: { command: string }) => Promise<unknown> };
+  ui: { log: (text: string) => void };
+}): Promise<void> {
+  try {
+    await $.session.compact();
+  } catch (error) {
+    $.ui.log(`lossless-compact: compacting through /compact instead (${error instanceof Error ? error.message : String(error)})`);
+    await $.command.run({ command: 'compact' });
+  }
+}
 
 async function getApiKey(
   $: {
@@ -748,13 +898,25 @@ function percent(ratio: number): string {
 export const register: Register = (on: On, options: PluginOptions) => {
   const configured = resolveLosslessCompactConfig(options);
   let compacting = false;
+  const trigger = new AutoCompactTrigger(configured);
   let classifierName: string = configured.classifier;
+  let classifierNote: string | undefined;
+  const commandState = (): CommandState => ({
+    archiveDir: configured.archiveDir,
+    classifier: classifierName,
+    ...(classifierNote ? { classifierNote } : {}),
+  });
 
   on('session.start', async ($, event, next) => {
     // Resolve `auto` up front so a fresh session can prove whether it will use
     // Jev or the local ruleset before the first compaction has happened.
     try {
-      classifierName = resolvedClassifierName(configured, await getApiKey($, configured));
+      const apiKey = await getApiKey($, configured);
+      classifierName = resolvedClassifierName(configured, apiKey);
+      classifierNote = noKeyNotice(configured, apiKey);
+      // One dim line in the terminal transcript (the debug log elsewhere); the
+      // compaction note and `/lossless` carry the same line where it matters.
+      if (classifierNote) $.ui.log(`lossless-compact: ${classifierNote}`);
     } catch (error) {
       try {
         $.ui.log(`lossless-compact: could not resolve the configured classifier (${error instanceof Error ? error.message : String(error)})`);
@@ -780,17 +942,23 @@ export const register: Register = (on: On, options: PluginOptions) => {
     return next(event);
   });
 
-  on('command.run', { command: COMMAND }, async ($, event) => {
-    const sessionId = await $.session.id();
-    const archive = new FileArchive(engineFs($), { root: configured.archiveDir });
-    const ours = await runContextCommand(event.args, {
-      sessionId,
-      messages: () => $.session.messages(),
-      archive,
-      last: async () => (await $.store.get(lastKey(sessionId))) as LastCompaction | undefined,
-      classifier: classifierName,
-    });
-    return ours;
+  on('command.run', { command: COMMAND }, async ($, event) => answerCommand($, event.args, commandState()));
+
+  on('skill.prompt', async ($, event, next) => {
+    if (!isMenuSkill(event.skill)) return next(event);
+    try {
+      const args = menuArgs(event.text);
+      const answered = await answerCommand($, args, commandState());
+      $.ui.log(`lossless-compact: /${COMMAND} ${args} answered from the slash menu (one model turn relays it; typed in full it needs none)`);
+      return { text: menuPrompt(args, answered) };
+    } catch (error) {
+      try {
+        $.ui.log(`lossless-compact: menu entry not answered (${error instanceof Error ? error.message : String(error)})`);
+      } catch {
+        // ignore
+      }
+      return next(event);
+    }
   });
 
   on('session.compact', async ($, event, next) => {
@@ -812,6 +980,7 @@ export const register: Register = (on: On, options: PluginOptions) => {
       };
       const classifier = chooseClassifier(configured, fetchFn, apiKey);
       classifierName = classifier.name;
+      classifierNote = noKeyNotice(configured, apiKey);
       const archive = new FileArchive(engineFs($), { root: configured.archiveDir });
       let optimized = await optimizeSession(event.messages, configured, classifier, archive, sessionId);
       const threshold = configured.keepThreshold ?? classifier.defaultThreshold ?? 0.5;
@@ -857,6 +1026,7 @@ export const register: Register = (on: On, options: PluginOptions) => {
             ...(snapshotPath ? { snapshotPath } : {}),
             archiveDir: absolute(root),
             ...(rawLogPath ? { rawLogPath } : {}),
+            ...(classifierNote ? { classifierNote } : {}),
           };
           messages = toSessionMessages(event.messages, withCompactionNote(result.messages, compactionNote(details)));
           fallbackNote = compactionNote({ ...details, summarized: true });
@@ -924,7 +1094,7 @@ export const register: Register = (on: On, options: PluginOptions) => {
     compacting = true;
     try {
       const { context } = await $.session.usage();
-      if (shouldCompact(context, configured)) await $.session.compact();
+      if (trigger.due(context)) await startCompaction($);
     } catch (error) {
       try {
         $.ui.log(`auto-compact skipped (${error instanceof Error ? error.message : String(error)})`);

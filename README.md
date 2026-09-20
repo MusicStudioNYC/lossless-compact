@@ -203,10 +203,12 @@ not exist before that.
    claude plugin install lossless-compact@lossless-compact
    ```
 
-3. Start a new session and type `/lossless` (it is in the slash-command menu
-   from the first keystroke). The report should start with `lossless-compact`
-   and name `jev` (with a key) or `ruleset` (without one). Claude Code's own
-   `/lossless` is untouched.
+3. Start a new session and type `/lossless` in full (in the terminal it is in
+   the slash-command menu from the first keystroke; the VS Code and Cursor
+   extensions list it as `/lossless-compact:lossless`, which works too — see
+   [`/lossless`](#lossless)). The report should start with `lossless-compact`
+   and name `jev` (with a key) or `ruleset` (without one, with a line saying
+   so).
 
    A session that was already open before step 2 does not have the plugin, and
    `/reload-plugins` does not load a hooks module into a running process (it
@@ -226,7 +228,12 @@ near the limit, or the plugin's — goes through the same hook, so none of
 them summarize. `/lossless` shows the plugin's usage and archive state.
 
 Without a `TYPESAFE_API_KEY` the plugin runs the local ruleset —
-no model, no network, ~200 ms on a 300k-token transcript. With a key (env var, settings
+no model, no network, ~200 ms on a 300k-token transcript — and says so once
+per place it matters: a dim line at session start (terminal), a line under
+`Classifier:` in `/lossless`, and a line in the compaction note, each with
+the honest figure (on the eval the ruleset leaves 3 of 6 must-keep results in
+place verbatim where Jev keeps 6 of 6; everything is archived either way).
+Choosing `classifier: ruleset` outright gets no such line. With a key (env var, settings
 `env`, or the plugin's `apiKey` option) it uses Jev. `/compact` and
 auto-compaction both go through it; the compaction toast reads `lossless-compact kept N/M
 messages, archived K units, no summary (…)`, or `fallback to built-in summary
@@ -247,10 +254,15 @@ anything else asks you: remove them (archived, restorable), remove and don't
 ask again this session, or use Claude's summary. The log says what was
 found, who reviewed it and what was decided.
 
-In a headless session (`claude -p`, the SDK)
-the host does not let a plugin start a compaction between turns yet, so the
-`compactAtTokens` trigger logs and waits; `/compact` and the host's own
-near-limit compaction still run through the hook there.
+In a headless session (`claude -p`, the SDK — and the VS Code and Cursor
+extensions run every chat as one) the host does not let a plugin call
+`$.session.compact()` between turns, so when the `compactAtTokens` trigger
+fires the plugin runs the `/compact` command instead, queued for the moment
+the session is idle: the same `session.compact` event, the same hook, no
+summary. The extension shows it as it shows a typed `/compact`. A crossing of
+the threshold fires once; the trigger re-arms when the context has dropped
+below it or grown by a quarter since, so a compaction that fell back cannot
+loop.
 
 ### `/lossless`
 
@@ -263,10 +275,24 @@ near-limit compaction still run through the hook there.
 /lossless retrieve <query>   lexical search over the archive
 ```
 
-It is the plugin's own command, so it is listed in the slash-command menu
-(the VS Code and Cursor extensions read that menu once at startup, so the
-plugin also ships a static `commands/lossless.md` for them; the hook answers
-it either way). Claude Code's own `/context` (the usage grid) is left alone.
+Typed in full, `/lossless …` runs the plugin's command directly: no model
+turn, the answer prints as the command's output. In the terminal it is in the
+slash-command menu from the first keystroke. The VS Code and Cursor
+extensions fill their menu once at startup from the commands on disk, so
+there the menu shows the plugin's static `commands/lossless.md` as
+`/lossless-compact:lossless` instead; picking that runs a prompt, and the
+plugin's `skill.prompt` hook swaps the command's answer in before the model
+reads it, so the model relays it (one short model turn). Typing `/lossless`
+in full works in the extensions too, without the turn. Claude Code's own
+`/context` (the usage grid) is left alone.
+
+Options live in `~/.claude/settings.json` under
+`pluginConfigs["lossless-compact@lossless-compact"].options` (the terminal
+CLI's `/config` lists them too; project settings are not read):
+
+```json
+{ "pluginConfigs": { "lossless-compact@lossless-compact": { "options": { "compactAtTokens": 100000 } } } }
+```
 
 Archive ids appear in the stubs the model sees, e.g.
 `[lossless-compact archived e_3f9a…: 8421 more chars of this Read result (file_path=src/a.ts); /lossless restore e_3f9a… brings it back verbatim, or re-run the tool]`.

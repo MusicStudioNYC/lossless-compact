@@ -2,6 +2,10 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import {
   chooseClassifier,
   engineFs,
+  isMenuSkill,
+  menuArgs,
+  menuPrompt,
+  noKeyNotice,
   reportLines,
   resolvedClassifierName,
   resolveLosslessCompactConfig,
@@ -212,6 +216,16 @@ describe('runContextCommand', () => {
     expect(text).toMatch(/~[\d,]+ tokens/);
     expect(text).toMatch(/\d+ explicit user constraints? found/);
     expect(text).toContain('1 explicit user constraint found');
+    expect(text).not.toContain('No TypeSafe key');
+  });
+
+  it('status carries the no-key line under the classifier when one is given', async () => {
+    const note = noKeyNotice({ classifier: 'auto' }, undefined)!;
+    const { text } = await runContextCommand('status', { ...deps, classifierNote: note });
+    const lines = text.split('\n');
+    const classifierLine = lines.findIndex((line) => line.startsWith('Classifier:'));
+    expect(lines[classifierLine]).toContain('ruleset (configured)');
+    expect(lines[classifierLine + 1]!.trim()).toBe(note);
   });
 
   it('list shows archived records ordered oldest-first (newest last)', async () => {
@@ -269,6 +283,51 @@ describe('runContextCommand', () => {
     expect((await runContextCommand('why nope-id', deps)).text).toBe('No archive record nope-id.');
     expect((await runContextCommand('show nope-id', deps)).text).toBe('No archive record nope-id.');
     expect((await runContextCommand('restore nope-id', deps)).text).toBe('No archive record nope-id.');
+  });
+});
+
+describe('noKeyNotice', () => {
+  it('speaks only when auto resolved to the ruleset for want of a key', () => {
+    const notice = noKeyNotice({ classifier: 'auto' }, undefined)!;
+    expect(notice).toMatch(/^No TypeSafe key found/);
+    expect(notice).toContain('3 of 6 vs 6 of 6');
+    expect(notice).toContain('Add a key to switch.');
+    expect(noKeyNotice({ classifier: 'auto' }, 'apikey_test')).toBeUndefined();
+    // A chosen ruleset is not a fallback; a chosen jev without a key fails elsewhere.
+    expect(noKeyNotice({ classifier: 'ruleset' }, undefined)).toBeUndefined();
+    expect(noKeyNotice({ classifier: 'jev' }, undefined)).toBeUndefined();
+  });
+});
+
+describe('slash-menu entry (skill.prompt)', () => {
+  it('recognises the static command under its plugin-qualified and bare names only', () => {
+    expect(isMenuSkill('lossless-compact:lossless')).toBe(true);
+    expect(isMenuSkill('lossless')).toBe(true);
+    expect(isMenuSkill('commit')).toBe(false);
+    expect(isMenuSkill('other-plugin:lossless')).toBe(false);
+  });
+
+  it('reads the arguments the host substituted into the first line', () => {
+    expect(menuArgs('/lossless list 3\n\nThis entry puts')).toBe('list 3');
+    expect(menuArgs('/lossless\n\nThis entry puts')).toBe('');
+    expect(menuArgs('/lossless   restore e_1  \nrest')).toBe('restore e_1');
+    // A host that does not substitute leaves the marker; that is no argument.
+    expect(menuArgs('/lossless $ARGUMENTS\nrest')).toBe('');
+    expect(menuArgs('something else entirely')).toBe('');
+  });
+
+  it('hands the model the answer to relay, and a restored record after it as context', () => {
+    const plain = menuPrompt('list 3', { text: '3 archived records:\ne_1  tool_result/Read' });
+    expect(plain).toContain('answered `/lossless list 3`');
+    expect(plain).toContain('<lossless_answer>\n3 archived records:\ne_1  tool_result/Read\n</lossless_answer>');
+    expect(plain).not.toContain('<retrieved_context');
+    const restored = menuPrompt('restore e_1', {
+      text: "Restored e_1 (tool_result/Read, ~12 tokens) into the model's context for this turn.",
+      context: ['<retrieved_context id="e_1" kind="tool_result">body</retrieved_context>'],
+    });
+    expect(restored.indexOf('</lossless_answer>')).toBeLessThan(restored.indexOf('<retrieved_context'));
+    expect(restored).toContain('Anything after the markers is context for you');
+    expect(menuPrompt('', { text: 'status' })).toContain('answered `/lossless`');
   });
 });
 

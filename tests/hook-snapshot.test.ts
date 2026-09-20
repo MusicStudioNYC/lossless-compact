@@ -134,6 +134,19 @@ describe('compactionNote / withCompactionNote', () => {
     expect(note).not.toMatch(/summar(y|ized) of/);
   });
 
+  it('carries the no-key line right after the outcome, and only when given', () => {
+    const base = {
+      at: '2026-09-20T00:00:00.000Z',
+      compactionId: 'c_1',
+      report,
+      archiveDir: 'C:/proj/.lossless-compact',
+    };
+    expect(compactionNote(base)).not.toContain('No TypeSafe key');
+    const lines = compactionNote({ ...base, classifierNote: 'No TypeSafe key found: ruleset.' }).split('\n');
+    const outcome = lines.findIndex((line) => line.startsWith('Classifier: ruleset'));
+    expect(lines[outcome + 1]).toBe('No TypeSafe key found: ruleset.');
+  });
+
   it('inserts the note after the pinned first message as a user message', () => {
     const messages = withCompactionNote(
       [
@@ -225,5 +238,23 @@ describe('shouldCompact', () => {
     expect(shouldCompact({ percent: 95 }, config)).toBe(false);
     expect(shouldCompact({ percent: 61, tokens: 10 }, { compactAtTokens: 0, compactAtPercent: 60 })).toBe(true);
     expect(shouldCompact({ percent: 99, tokens: 999_999 }, { compactAtTokens: 0, compactAtPercent: 0 })).toBe(false);
+  });
+});
+
+describe('AutoCompactTrigger', () => {
+  it('fires once per crossing, and again only after the context shrank or grew by a quarter', async () => {
+    const { AutoCompactTrigger } = await import('../hooks/lossless-compact.js');
+    const trigger = new AutoCompactTrigger({ compactAtTokens: 120_000, compactAtPercent: 0 });
+    expect(trigger.due({ tokens: 100_000 })).toBe(false);
+    expect(trigger.due({ tokens: 121_000 })).toBe(true);
+    // The compaction was skipped or fell back: the context is still there. No loop.
+    expect(trigger.due({ tokens: 121_500 })).toBe(false);
+    expect(trigger.due({ tokens: 140_000 })).toBe(false);
+    // A quarter more since the attempt: new material, try again.
+    expect(trigger.due({ tokens: 151_250 })).toBe(true);
+    expect(trigger.due({ tokens: 152_000 })).toBe(false);
+    // It worked: below the threshold re-arms, the next crossing fires.
+    expect(trigger.due({ tokens: 50_000 })).toBe(false);
+    expect(trigger.due({ tokens: 120_000 })).toBe(true);
   });
 });
