@@ -6,10 +6,10 @@
 
 Your Claude Code session gets long. You have two choices, and both hurt:
 
-| | Cost | Quality | |
-| :-- | :-: | :-: | :-- |
-| **Let the chat grow** | ❌ | ❌ | Every turn re-sends the whole history, so each one costs more than the last — and the longer it gets, the sloppier the answers. |
-| **Run `/compact`** | ✅ | ❌ | Cheaper — but now the model works from a summary of your history that it wrote from memory, and quality drops *further*. The exact port number, file path or error you needed? Paraphrased or gone, and nobody tells you which. |
+| | Cost | Quality | Speed | |
+| :-- | :-: | :-: | :-: | :-- |
+| **Let the chat grow** | ❌ | ❌ | ❌ | Every turn re-sends the whole history, so each one costs more and takes longer than the last — and the longer it gets, the sloppier the answers. |
+| **Run `/compact`** | ✅ | ❌ | ❌ | Cheaper — but now the model works from a summary of your history that it wrote from memory, and quality drops *further*. The exact port number, file path or error you needed? Paraphrased or gone, and nobody tells you which. And writing that summary takes a minute or two, every time. |
 
 That is what `/compact` is: it asks the model to write a summary of
 everything so far, throws away the original transcript, and carries on with
@@ -29,9 +29,11 @@ just the summary. Which costs you more than it looks:
 
 ## Meet Lossless Compact
 
-| | Cost | Quality | |
-| :-- | :-: | :-: | :-- |
-| **Compact losslessly** | ✅ | ✅ | The same ~90 % smaller context — and nothing rewritten. What stays is the original bytes; what goes is archived, exact and searchable, and back in front of the model in one command. |
+Yes, you can have your cake and eat it too: shrink the context, forget nothing.
+
+| | Cost | Quality | Speed | |
+| :-- | :-: | :-: | :-: | :-- |
+| **Compact losslessly** | ✅ | ✅ | ✅ | The same ~90 % smaller context, in under a second — and nothing rewritten. What stays is the original bytes; what goes is archived, exact and searchable, and back in front of the model in one command. |
 
 lossless-compact is a plugin for Claude Code (and Cursor, through the same
 extension). It takes over compaction — `/compact`, auto-compaction, all of
