@@ -49,7 +49,10 @@ interface ShardFile {
 const INDEX = 'index.json';
 
 function isMissing(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && (error as { code?: string }).code === 'ENOENT';
+  if (typeof error !== 'object' || error === null) return false;
+  const { code, message } = error as { code?: string; message?: string };
+  // The plugin host forwards its errno in the message only (`… failed: ENOENT`).
+  return code === 'ENOENT' || /\bENOENT\b/.test(message ?? '');
 }
 
 /**
@@ -84,6 +87,9 @@ export class FileArchive implements ArchiveStore {
   }
 
   private async readJson<T>(path: string): Promise<T | undefined> {
+    // A missing index or shard is the normal state before the first compaction;
+    // ask first so the host does not log a failed read.
+    if (!(await this.fs.exists(path))) return undefined;
     try {
       return JSON.parse(await this.fs.read(path)) as T;
     } catch (error) {

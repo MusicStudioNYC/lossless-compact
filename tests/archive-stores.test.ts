@@ -277,4 +277,29 @@ describe('FileArchive', () => {
     expect(found?.id).toBe('y1');
     expect(found?.sessionId).toBe('session-y');
   });
+
+  it('treats a missing index as empty without reading it, even when the host reports ENOENT only in the message', async () => {
+    // The plugin host forwards fs errors across a worker hop as plain Errors:
+    // no `code`, just "… failed: ENOENT". Seen live on 2.1.278 (the first
+    // compaction of a session fell back to the built-in summary).
+    const base = fakeFs();
+    const reads: string[] = [];
+    const hostLike: TextFs = {
+      ...base,
+      async read(path: string) {
+        reads.push(path);
+        if (!base.files.has(path)) throw new Error(`context-os: $.fs.read(${path}) failed: ENOENT`);
+        return base.files.get(path)!;
+      },
+    };
+    const archive = new FileArchive(hostLike, { root: '.ctx' });
+    expect(await archive.stats('fresh-session')).toMatchObject({ records: 0 });
+    expect(await archive.search('anything', { sessionId: 'fresh-session' })).toEqual([]);
+    expect(reads).toEqual([]);
+
+    // And when a read still races a missing file, the message form is enough.
+    const racy: TextFs = { ...hostLike, exists: async () => true };
+    const archive2 = new FileArchive(racy, { root: '.ctx' });
+    expect(await archive2.stats('fresh-session')).toMatchObject({ records: 0 });
+  });
 });
