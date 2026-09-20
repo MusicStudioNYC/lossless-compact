@@ -124,6 +124,31 @@ reduction that the hook does not fall back to the built-in summary. Jev costs
 ~9 requests and ~1.2 s per 250–760-message session (bounded concurrency 4).
 Real-session fidelity is unlabelled so far (follow-ups).
 
+## Native `/compact` comparison (2026-09-20, judge = Sonnet via `claude -p`, report `2026-09-20T07-23-10-412Z`)
+
+Exact = substring scoring; judge = Sonnet reading the *active* compacted
+context and marking each ground-truth item verbatim / paraphrased / absent
+(the fair scoring for a paraphrasing summary; ~6 % noisy — it marked 2/32
+probes lost on the uncompacted transcript).
+
+| Mode | Compacted to | Must-keeps lost (exact) | Must-keeps lost (judge) | Probes recoverable (exact) | Probes in active context (judge) | Droppable content still present (judge) | Verbatim | Time / compaction |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: |
+| NO_COMPACTION | 100 % | 0/6 | 0/6 | 27/27 | 30/32 | 262/279 | yes | – |
+| UPSTREAM_FAST_JEV | 3 % | 4/6 | 2/6 | 3/27 | 9/32 | 73/279 | yes | 6 ms + Jev |
+| OURS_JEV (0.35) | 9 % | 0/6 | 0/6 | 27/27 | 11/32 (+27/27 archived) | 14/279 (5 %) | yes | 47 ms + ~1 s Jev, ~1¢ |
+| OURS_HEURISTIC (0.4) | 7 % | 3/6 | 1/6 | 27/27 | 10/32 | 45/279 | yes | 40 ms, $0 |
+| CLAUDE_NATIVE_COMPACTION (summary) | 10 % | 6/6 (nothing verbatim survives) | 0/6 | 14/27 | 16/32 | 80/279 (29 %) | no — 8/8 rewritten | 82 s, full-context model call |
+
+Reading: on the six needles the summary matched us semantically (Sonnet saw
+the whole ≤ 70k-token transcript and wrote the salient facts down); our
+advantage there is that the value is the original bytes rather than a
+paraphrase. The summary keeps more distractor facts in the active context
+(16/32 vs 11/32) but drags 29 % of the droppable content along and rewrites
+everything; ours keeps 5 % and can bring any of the 27/27 archived probes
+back (2 of 3 evicted needles returned through prompt retrieval). Upstream is
+worst on every axis. Open question for real sessions: a summary's recall at
+200k+ tokens, to be answered once ~5 real sessions are labelled.
+
 ## Heuristic results (2026-09-20, no Jev)
 
 Adversarial set (8 cases) and 12 real sessions (98k–330k tokens each, the

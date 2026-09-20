@@ -13,7 +13,7 @@
     "keepThreshold": {
       "type": "number",
       "title": "Keep threshold",
-      "description": "Minimum keep probability for a tool result or call to stay. Leave unset to use the classifier's own calibration (Jev 0.15, heuristic 0.5)."
+      "description": "Minimum keep probability for a tool result or call to stay. Leave unset to use the classifier's own calibration (Jev 0.35, heuristic 0.4)."
     },
     "classifier": {
       "type": "string",
