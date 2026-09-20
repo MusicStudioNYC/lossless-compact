@@ -132,6 +132,13 @@ not exist before that.
    short `context-os active` toast; the host does not let plugins add rows to
    that modal.
 
+   A session that was already open before step 2 does not have the plugin, and
+   `/reload-plugins` does not load a hooks module into a running process (it
+   reports `hooks modules unchanged`). In the VS Code extension every chat tab
+   is its own `claude` process, so open a new chat (or resume the old session
+   in one). In a tab without the plugin, `/compact` is Claude Code's own
+   summary — a minute or more on a large context, with no `context-os` toast.
+
 Or from a checkout, for one session: `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir .`
 
 Auto-compaction: the plugin asks the host to compact once the live context
