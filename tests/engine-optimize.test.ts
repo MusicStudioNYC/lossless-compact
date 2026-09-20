@@ -281,10 +281,58 @@ describe('optimize: main scenario', () => {
     const narrated = result.messages.find((m) => m.text.startsWith('Editing b.ts to fix the off-by-one.'));
     expect(narrated).toBeDefined();
     expect(narrated!.text.startsWith('Editing b.ts to fix the off-by-one.')).toBe(true);
-    expect(narrated!.text).toContain('[context-os:');
-    expect(narrated!.text).toContain('archived as');
+    expect(narrated!.text).toContain('[context-os archived 1 tool call made here: Edit file_path=src/b.ts → ');
     // the call itself is gone from the rebuilt message
     expect(narrated!.toolUses.some((u) => u.tool_use_id === 'c6')).toBe(false);
+  });
+
+  it('a text-less message whose only call was dropped becomes a marker alone, and a run of them merges into one', async () => {
+    // Claude Code puts every tool call in its own assistant message with no
+    // narration; seen live, four dropped Reads vanished without a trace.
+    const dropAll: Classifier = {
+      name: 'drop-all',
+      async score(candidates) {
+        const scores = new Map<string, ClassifierScores>();
+        for (const c of candidates) scores.set(c.id, { keepCall: 0.05, keepResult: 0.05 });
+        return { scores, stats: { requests: 1, stateTokens: 0, stateStage: 'fake', ms: 0, unscored: [] } };
+      },
+    };
+    const big = 'declare const x: number;\n'.repeat(80);
+    // `result` is the shared OptimizeResult inside this describe; build results by hand.
+    const res = (id: string, text: string): Message => message('user', '', { toolResults: [{ tool_use_id: id, text, isError: false }] });
+    const messages = [
+      message('user', 'Read the typings in chunks, then tell me the answer.'),
+      call('r1', 'Read', { file_path: 'types/api.d.ts', offset: 1, limit: 2000 }, big),
+      res('r1', big),
+      call('r2', 'Read', { file_path: 'types/api.d.ts', offset: 2001, limit: 2000 }, big),
+      res('r2', big),
+      call('r3', 'Read', { file_path: 'types/api.d.ts', offset: 4001, limit: 2000 }, big),
+      res('r3', big),
+      message('assistant', 'Chunks read.'),
+      call('r4', 'Read', { file_path: 'docs/notes.md' }, big),
+      res('r4', big),
+      message('assistant', 'The answer is 42.'),
+      message('user', 'thanks'),
+    ];
+    const { result: out } = await run(messages, { classifier: dropAll, preserveRecentMessages: 2 });
+    const texts = out.messages.map((m) => m.text);
+    // one merged marker for r1..r3, the narration, one marker for r4, then the pinned tail
+    expect(out.messages).toHaveLength(6);
+    expect(out.messages[0]!.text).toBe(messages[0]!.text);
+    const mergedMarker = out.messages[1]!;
+    expect(mergedMarker.role).toBe('assistant');
+    expect(mergedMarker.toolUses).toEqual([]);
+    expect(mergedMarker.text.startsWith('[context-os archived 3 tool calls made here: Read file_path=types/api.d.ts → ')).toBe(true);
+    expect(mergedMarker.text).toContain('; Read file_path=types/api.d.ts offset=2001 → ');
+    expect(mergedMarker.text).toContain('; Read file_path=types/api.d.ts offset=4001 → ');
+    const ids = out.actions.slice(0, 3).map((a) => a.archiveIds![0]);
+    for (const id of ids) expect(mergedMarker.text).toContain(id!);
+    expect(texts[2]).toBe('Chunks read.');
+    expect(texts[3]!.startsWith('[context-os archived 1 tool call made here: Read file_path=docs/notes.md → e_')).toBe(true);
+    expect(texts.slice(4)).toEqual(['The answer is 42.', 'thanks']);
+    // and nothing of the sort without the option
+    const { result: bare } = await run(messages, { classifier: dropAll, preserveRecentMessages: 2, markRemovedCalls: false });
+    expect(bare.messages.map((m) => m.text)).toEqual([messages[0]!.text, 'Chunks read.', 'The answer is 42.', 'thanks']);
   });
 
   it('leaves narration text unchanged when markRemovedCalls is false', async () => {

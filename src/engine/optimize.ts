@@ -130,7 +130,10 @@ function inputSummary(call: ToolCall): string {
     const value = call.input[key];
     if (typeof value === 'string' && value.length > 0) {
       const flat = value.replace(/\s+/g, ' ');
-      return `${key}=${flat.length > 80 ? `${flat.slice(0, 79)}…` : flat}`;
+      const head = `${key}=${flat.length > 80 ? `${flat.slice(0, 79)}…` : flat}`;
+      // A chunked read is only identifiable by its offset.
+      const offset = call.input['offset'];
+      return typeof offset === 'number' && offset > 1 ? `${head} offset=${offset}` : head;
     }
   }
   return '';
@@ -161,11 +164,11 @@ export function stubResultText(
 
 /** The note appended to an assistant message whose tool calls were removed. */
 export function removedCallsMarker(removed: readonly { call: ToolCall; archiveId: string }[]): string {
-  const names = removed.map((r) => `${r.call.tool} ${inputSummary(r.call)}`.trim()).join(', ');
-  const ids = removed.map((r) => r.archiveId).join(', ');
-  return `[context-os: ${removed.length} tool call${removed.length === 1 ? '' : 's'} made here (${names}) ${
-    removed.length === 1 ? 'was' : 'were'
-  } archived as ${ids}; the inputs and results are no longer in context — /context restore <id> to see them.]`;
+  // Terse on purpose: one of these stands for every removed call in a live
+  // session (Claude Code gives each call its own message), and the
+  // compaction note explains the mechanism once.
+  const items = removed.map((r) => `${`${r.call.tool} ${inputSummary(r.call)}`.trim()} → ${r.archiveId}`).join('; ');
+  return `[context-os archived ${removed.length} tool call${removed.length === 1 ? '' : 's'} made here: ${items} — out of context; /context restore <id>]`;
 }
 
 interface Applied {
@@ -278,6 +281,8 @@ export function applyActions(
   };
 
   const kept: Message[] = [];
+  /** Marker-only messages by the calls they stand for, so adjacent ones merge into one line. */
+  const markerRuns = new Map<Message, { call: ToolCall; archiveId: string }[]>();
   for (const message of messages) {
     const touched =
       message.toolUses.some((tool) => decisionOf.has(tool.tool_use_id)) ||
@@ -331,8 +336,11 @@ export function applyActions(
       toolResults.push(copy);
     }
     let text = message.text;
-    if (removed.length > 0 && options.markRemovedCalls && message.text.trim().length > 0) {
-      text = `${message.text}\n\n${removedCallsMarker(removed)}`;
+    if (removed.length > 0 && options.markRemovedCalls) {
+      // Claude Code puts each tool call in its own text-less assistant
+      // message, so a message often has nothing left once its call goes:
+      // it becomes the marker alone, and a run of them merges below.
+      text = message.text.trim().length > 0 ? `${message.text}\n\n${removedCallsMarker(removed)}` : removedCallsMarker(removed);
     }
     const originalResults = message.toolResults ?? [];
     if (
@@ -348,6 +356,17 @@ export function applyActions(
     if (text.trim().length === 0 && toolUses.length === 0 && toolResults.length === 0) continue;
     const rebuilt: Message = { role: message.role, text, toolUses };
     if (toolResults.length > 0) rebuilt.toolResults = toolResults;
+    const markerOnly = message.text.trim().length === 0 && toolUses.length === 0 && toolResults.length === 0;
+    const previous = kept[kept.length - 1];
+    const previousRemoved = previous ? markerRuns.get(previous) : undefined;
+    if (markerOnly && previous && previousRemoved) {
+      const run = [...previousRemoved, ...removed];
+      const merged: Message = { role: 'assistant', text: removedCallsMarker(run), toolUses: [] };
+      kept[kept.length - 1] = merged;
+      markerRuns.set(merged, run);
+      continue;
+    }
+    if (markerOnly) markerRuns.set(rebuilt, removed);
     kept.push(rebuilt);
   }
   return { messages: kept, archived };

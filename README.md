@@ -28,9 +28,11 @@ transcript ──► ledger (stable event ids)
 
 User and assistant text is never removed or rewritten (a removed tool call
 appends a one-line marker to the message that narrated it, so a later turn
-cannot mistake narration for work still in context). Tool call ↔ result
-structure is always preserved. If the classifier fails or is unsure, content
-stays.
+cannot mistake narration for work still in context; Claude Code gives each
+call its own text-less message, so there the marker stands alone, and a run
+of removed calls becomes one line naming every archive id). Tool call ↔
+result structure is always preserved. If the classifier fails or is unsure,
+content stays.
 
 Before compacting, the exact transcript is written to
 `.context-os/snapshots/<session>/<compaction>.json`, and one note is inserted
