@@ -2,7 +2,7 @@
 
 **Status:** open. Successor: mark this done when Phase 3 (durable memory) lands.
 **Repo:** `C:\Users\Bunkspunkles\Dropbox\Websites\fast-jev-compaction` (branch `main`, clean; the smoke-test chat of 2026-09-20 added commits `2812cae`…`969b482` plus this update — see `git log`).
-**Deployed vs local:** nothing is pushed anywhere yet. `git remote -v` shows only `upstream` (tamaratran); the owner chose to push to `<owner>/context-os` — create that empty GitHub repo, then `git remote add origin <url> && git push -u origin main`. No npm publish. The plugin **has** run live in Claude Code 2.1.278 (headless `-p`; see "Live smoke test" below and docs/evals.md).
+**Deployed vs local:** pushed to https://github.com/MusicStudioNYC/context-os (**private** for now; `origin`, branch `main`; `gh` 2.101 is installed at `C:Program FilesGitHub CLIgh.exe` and logged in as MusicStudioNYC). No npm publish. On this PC the plugin is **installed at user scope** (`claude plugin install context-os@context-os`, marketplace source = this checkout as a directory, so the host reads `hooks/hooks.json` from the repo in place and edits go live on the next session); `~/.claude/settings.json` `env` carries `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` and `TYPESAFE_API_KEY` (backup: `settings.json.bak-2026-09-20`). The plugin **has** run live in Claude Code 2.1.278 (headless `-p`; see "Live smoke test" below and docs/evals.md).
 **Jev key:** `~/.typesafe_key` (one line, `apikey_…`, 108 chars; not in the repo). Verified live against `jev-1.13.0`. Use it as `TYPESAFE_API_KEY="$(cat ~/.typesafe_key)"`; for the plugin put it in `~/.claude/settings.json` `env` or the plugin's `apiKey` option.
 
 ## What was asked
@@ -74,7 +74,8 @@ Still open: **the `turn.complete` auto-trigger could not be exercised** — `$.s
 
 ## Owner's answers from the chat
 
-- Repo & name: "Push to <you>/context-os, keep npm name for now" (not done: no `gh` and no GitHub handle on this machine — see top).
+- Repo & name: "Push to <you>/context-os, keep npm name for now" → done 2026-09-20 (third chat): `MusicStudioNYC/context-os`, private until the interactive check passes.
+- Third chat: "Install globally now" (user scope, all repos) and "Device login via gh" for GitHub — both done; see "Deployed vs local".
 - Jev key: provided (`Downloads/jev context os.txt`, copied to `~/.typesafe_key`).
 - Real labels: "Yes, model-assisted on ~5 sessions".
 - Next step: "Live smoke test in Claude Code 2.1.278".

@@ -11,11 +11,11 @@ handoff's "what is left" list when it is picked up; delete it when done.
 | 2026-09-20 | Per-project settings: `.context-os/config.json` + `/context set` (option B) | Owner confirmed; after the smoke test |
 | 2026-09-20 | Cache read/write metrics from `LoadedTranscript.usage` in the report | Plan §3.5; data is loaded, not aggregated |
 | 2026-09-20 | Label ~5 real sessions model-assisted (`labels.json`) and re-check the Jev 0.35 default | Owner chose model-assisted; next chat after the smoke test |
-| 2026-09-20 | Create `<owner>/context-os` on GitHub, add `origin`, push | No `gh` and no handle on this machine |
 | 2026-09-20 | Embedding-based retrieval + query expansion from recent context | Plan §14; lexical v1 recovers 2/3 needles |
 | 2026-09-20 | Durable memory extraction via `$.model.fork` with invalidation | Phase 3; nothing produces `EXTRACT_MEMORY_AND_ARCHIVE` yet |
 | 2026-09-20 | OpenRouter ZDR transport option (`provider: { zdr: true, data_collection: 'deny' }`) | Plan §23; verify OpenRouter routes `~typesafe/jev-latest` through a ZDR provider first |
-| 2026-09-20 | Decide npm package name (`fast-jev-compaction` → `context-os`?) and the GitHub remote for `origin` | Owner decision |
+| 2026-09-20 | Decide npm package name (`fast-jev-compaction` → `context-os`?) | Owner decision; the plugin path needs no npm |
+| 2026-09-20 | Flip `MusicStudioNYC/context-os` from private to public (`gh repo edit --visibility public --accept-visibility-change-consequences`) | Owner wants the interactive auto-compaction check first; handoff docs carry local paths |
 | 2026-09-20 | Dedupe rehydration across turns (the same record re-injected every prompt that mentions it) | Per-turn cost; needs a `$.store` note of recently injected ids |
 | 2026-09-20 | Interactive check of the `turn.complete` auto-compaction trigger (needs a VS Code session past 120k tokens); `$.session.compact()` is unavailable headless | Only the headless path was exercised in the smoke test |
 | 2026-09-20 | Retrieval column in `scripts/eval.ts` report (today `scripts/retrieval-check.ts` is separate) | Small; the check script exists and is cited in docs/evals.md |
