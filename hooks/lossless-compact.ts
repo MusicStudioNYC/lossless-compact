@@ -1033,19 +1033,32 @@ export const register: Register = (on: On, options: PluginOptions) => {
         }
       }
       for (const line of decisionLogLines(result)) $.ui.log(line);
+      const ratio = reductionRatio(result);
+      const tooLittle = ratio < configured.minReductionRatio;
+      // The plugin's own trigger (`plugin` in the terminal; `/compact` run
+      // from turn.complete on the SDK path, where `compacting` is held) asked
+      // for room the user did not: too little to remove is a reason to wait
+      // for the context to grow, never to summarize what was protected. A
+      // typed /compact and the host's own near-limit run still fall back —
+      // those need the room now.
+      const own = event.trigger === 'plugin' || compacting;
       const summary = summarize(result);
       try {
         await $.store.set(lastKey(sessionId), {
           at: new Date().toISOString(),
           report: result.report,
-          summary,
+          summary: tooLittle && own ? `left as is (below ${percent(configured.minReductionRatio)} minimum): ${summary}` : summary,
         } satisfies LastCompaction);
       } catch {
         // The status line is a nicety; never fail the compaction over it.
       }
-      const ratio = reductionRatio(result);
-      if (ratio < configured.minReductionRatio) {
-        return fallback(`below ${percent(configured.minReductionRatio)} minimum: ${summary}`);
+      if (tooLittle) {
+        const reason = `below ${percent(configured.minReductionRatio)} minimum: ${summary}`;
+        if (own) {
+          safeNotify($, `lossless-compact: nothing to compact yet (${reason}); tries again once the context has grown by a quarter`);
+          return { skip: reason };
+        }
+        return fallback(reason);
       }
       if (distrust) return fallback(distrust);
       safeNotify(

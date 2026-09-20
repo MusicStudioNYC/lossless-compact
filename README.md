@@ -262,7 +262,11 @@ the session is idle: the same `session.compact` event, the same hook, no
 summary. The extension shows it as it shows a typed `/compact`. A crossing of
 the threshold fires once; the trigger re-arms when the context has dropped
 below it or grown by a quarter since, so a compaction that fell back cannot
-loop.
+loop. And when the plugin's own trigger finds too little to remove (under
+`minReductionRatio`, because most of the context is protected), it leaves
+the conversation as it is and waits for it to grow — only a typed `/compact`
+or the host's own near-limit compaction fall back to the built-in summary,
+since those need the room now.
 
 ### `/lossless`
 
