@@ -1,0 +1,12 @@
+{
+ "name": "port-in-tool-result",
+ "description": "A single early `cat .env.example` result states POSTGRES_PORT=54329 once and it is never repeated; the final task needs the API to connect to that same database.",
+ "source": "synthetic",
+ "generator": "scripts/make-adversarial.ts",
+ "seed": 1002,
+ "messages": 165,
+ "toolCalls": 75,
+ "chars": 122544,
+ "estTokens": 37088,
+ "createdAt": "2026-09-20T05:24:37.277Z"
+}

@@ -1,0 +1,12 @@
+{
+ "name": "rejected-approach",
+ "description": "The assistant proposes Redis Pub/Sub; the user rejects it for Redis Streams with an explicit reason. Later filler content keeps mentioning the rejected Pub/Sub approach.",
+ "source": "synthetic",
+ "generator": "scripts/make-adversarial.ts",
+ "seed": 1004,
+ "messages": 143,
+ "toolCalls": 63,
+ "chars": 91783,
+ "estTokens": 27351,
+ "createdAt": "2026-09-20T05:24:37.311Z"
+}

@@ -1,0 +1,12 @@
+{
+ "name": "flaky-test-workaround",
+ "description": "An early flaky-test investigation lands on a one-line workaround (--pool=forks), confirmed by the user; ~150k+ chars of harmless, near-identical build logs follow before the same symptom resurfaces.",
+ "source": "synthetic",
+ "generator": "scripts/make-adversarial.ts",
+ "seed": 1003,
+ "messages": 139,
+ "toolCalls": 66,
+ "chars": 189025,
+ "estTokens": 68867,
+ "createdAt": "2026-09-20T05:24:37.296Z"
+}

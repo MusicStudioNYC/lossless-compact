@@ -1,0 +1,12 @@
+{
+ "name": "obsolete-looking-root-cause",
+ "description": "A routine-looking `npm ls` early on contains an unmet peer dependency warning for zod; ~80 messages later the build fails with a zod type error whose cause is that same mismatch.",
+ "source": "synthetic",
+ "generator": "scripts/make-adversarial.ts",
+ "seed": 1007,
+ "messages": 118,
+ "toolCalls": 53,
+ "chars": 90398,
+ "estTokens": 27144,
+ "createdAt": "2026-09-20T05:24:37.334Z"
+}

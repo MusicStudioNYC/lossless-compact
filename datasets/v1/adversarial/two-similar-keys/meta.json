@@ -1,0 +1,12 @@
+{
+ "name": "two-similar-keys",
+ "description": "A stale doc and a live CLI call disagree on the Stripe webhook id; the user states which one is correct in a short message that must not get confused with the stale value later.",
+ "source": "synthetic",
+ "generator": "scripts/make-adversarial.ts",
+ "seed": 1006,
+ "messages": 149,
+ "toolCalls": 69,
+ "chars": 89151,
+ "estTokens": 27524,
+ "createdAt": "2026-09-20T05:24:37.328Z"
+}

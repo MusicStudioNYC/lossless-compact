@@ -74,13 +74,14 @@ export function batchCalls(
   calls: readonly ToolCall[],
   stateTokens: number,
   options: Pick<ResolvedCompactOptions, 'maxRequestTokens'>,
+  questions: (call: ToolCall) => JevQuestions = questionsFor,
 ): ToolCall[][] {
   const budget = options.maxRequestTokens - stateTokens - REQUEST_OVERHEAD_TOKENS;
   const batches: ToolCall[][] = [];
   let current: ToolCall[] = [];
   let currentTokens = 0;
   for (const call of calls) {
-    const tokens = estimateTokens(JSON.stringify(questionsFor(call)));
+    const tokens = estimateTokens(JSON.stringify(questions(call)));
     if (current.length > 0 && currentTokens + tokens > budget) {
       batches.push(current);
       current = [];

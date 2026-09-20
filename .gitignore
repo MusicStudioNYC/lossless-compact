@@ -2,3 +2,7 @@ node_modules
 dist
 .env
 demo/JevDemo/build
+datasets/real/
+reports/
+.context-os/
+scratch/

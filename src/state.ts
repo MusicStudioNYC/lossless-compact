@@ -102,8 +102,9 @@ function inputText(input: Record<string, unknown>, limit: number): string {
   return truncate(json, limit);
 }
 
-function resultNote(call: ToolCall): string {
-  return `${call.isError ? 'error' : 'ok'}, ${call.resultChars} chars (omitted)`;
+function resultNote(call: ToolCall, sketch?: string): string {
+  const note = `${call.isError ? 'error' : 'ok'}, ${call.resultChars} chars (omitted)`;
+  return sketch ? `${note}: ${sketch}` : note;
 }
 
 /** One call as a single line, for when the structured form is too costly. */
@@ -152,6 +153,7 @@ function historyEntries(
   messages: readonly Message[],
   calls: readonly ToolCall[],
   inputChars: number,
+  sketches?: ReadonlyMap<string, string>,
 ): HistoryEntry[] {
   const byMessage = callsByMessage(calls);
   const entries: HistoryEntry[] = [];
@@ -160,7 +162,7 @@ function historyEntries(
       id: call.id,
       tool: call.tool,
       input: inputText(call.input, inputChars),
-      result: resultNote(call),
+      result: resultNote(call, sketches?.get(call.id)),
     }));
     if (message.text.trim().length === 0 && toolCalls.length === 0) return;
     const entry: HistoryEntry = { i, role: message.role, text: message.text };
@@ -185,7 +187,8 @@ export function goalFromMessages(messages: readonly Message[]): string {
 }
 
 /**
- * Builds the Jev state from the whole conversation and shrinks it in stages
+ * Builds the Jev state from the whole conversation (each result replaced by a
+ * size note, plus its sketch when one is given) and shrinks it in stages
  * until it fits `maxStateTokens`: tool inputs are truncated, then long texts
  * are abridged oldest-first (pinned messages last), then old messages collapse
  * to a one-line note, then old tool calls shrink to one line each, then old
@@ -196,6 +199,8 @@ export function fitState(
   messages: readonly Message[],
   calls: readonly ToolCall[],
   options: Pick<ResolvedCompactOptions, 'maxStateTokens' | 'preserveRecentMessages' | 'goal'>,
+  /** Per call id, a short sketch of the result shown to Jev beside the size note. */
+  sketches?: ReadonlyMap<string, string>,
 ): FittedState {
   const goal = options.goal || goalFromMessages(messages);
   const stateOf = (history: HistoryEntry[]): CompactionState => ({
@@ -215,7 +220,7 @@ export function fitState(
   let perEntry: number[] = [];
   let tokens = 0;
   const rebuild = (inputChars: number): void => {
-    history = historyEntries(messages, calls, inputChars);
+    history = historyEntries(messages, calls, inputChars, sketches);
     perEntry = history.map(entryTokens);
     tokens = baseTokens + perEntry.reduce((sum, n) => sum + n, 0);
   };

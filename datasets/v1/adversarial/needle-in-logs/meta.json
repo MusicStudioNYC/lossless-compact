@@ -1,0 +1,12 @@
+{
+ "name": "needle-in-logs",
+ "description": "A single, high-stakes migration-safety constraint sits in the middle of ~150k-250k chars of harmless, unrelated build-log noise.",
+ "source": "synthetic",
+ "generator": "scripts/make-adversarial.ts",
+ "seed": 1008,
+ "messages": 129,
+ "toolCalls": 61,
+ "chars": 184011,
+ "estTokens": 66923,
+ "createdAt": "2026-09-20T05:24:37.350Z"
+}

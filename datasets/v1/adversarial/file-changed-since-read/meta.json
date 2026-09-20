@@ -1,0 +1,12 @@
+{
+ "name": "file-changed-since-read",
+ "description": "An early Read shows MAX_UPLOAD_MB = 25; a later Edit raises it to 100 and a still-later Read confirms it; the final bug report only makes sense once the original value and the change are both visible.",
+ "source": "synthetic",
+ "generator": "scripts/make-adversarial.ts",
+ "seed": 1005,
+ "messages": 161,
+ "toolCalls": 73,
+ "chars": 99973,
+ "estTokens": 30488,
+ "createdAt": "2026-09-20T05:24:37.319Z"
+}

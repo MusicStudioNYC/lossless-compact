@@ -1,0 +1,12 @@
+{
+ "name": "late-constraint",
+ "description": "A standing \"never touch src/generated/\" rule is stated at message ~5, then buried under ~150 messages of unrelated work before the final task asks to edit exactly that path.",
+ "source": "synthetic",
+ "generator": "scripts/make-adversarial.ts",
+ "seed": 1001,
+ "messages": 176,
+ "toolCalls": 81,
+ "chars": 153957,
+ "estTokens": 46341,
+ "createdAt": "2026-09-20T05:24:37.266Z"
+}

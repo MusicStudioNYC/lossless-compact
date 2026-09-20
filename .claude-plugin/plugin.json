@@ -1,7 +1,7 @@
 {
-  "name": "fast-jev-compaction",
-  "version": "0.3.0",
-  "description": "Verbatim Jev-guided compaction for Claude Code sessions.",
+  "name": "context-os",
+  "version": "0.4.0",
+  "description": "Verbatim, reversible, provenance-tracked context compaction for Claude Code (Jev or local heuristics); /context to inspect and restore.",
   "license": "MIT",
   "userConfig": {
     "apiKey": {
@@ -13,8 +13,70 @@
     "keepThreshold": {
       "type": "number",
       "title": "Keep threshold",
-      "description": "Minimum Jev probability that a tool call or tool result is still needed; below it the item is removed.",
-      "default": 0.5
+      "description": "Minimum keep probability for a tool result or call to stay. Leave unset to use the classifier's own calibration (Jev 0.15, heuristic 0.5)."
+    },
+    "classifier": {
+      "type": "string",
+      "title": "Classifier",
+      "description": "auto = Jev when a TypeSafe key is available, otherwise local heuristics (no network).",
+      "default": "auto",
+      "options": [
+        "auto",
+        "jev",
+        "heuristic"
+      ]
+    },
+    "questionStyle": {
+      "type": "string",
+      "title": "Jev question style",
+      "description": "useful = \"is keeping this useful\" with explicit criteria (recommended); upstream = the original \"must stay verbatim\" wording.",
+      "default": "useful",
+      "options": [
+        "useful",
+        "upstream"
+      ]
+    },
+    "archiveDir": {
+      "type": "string",
+      "title": "Archive directory",
+      "description": "Where evicted context is stored verbatim, relative to the project.",
+      "default": ".context-os"
+    },
+    "safetyMargin": {
+      "type": "number",
+      "title": "Safety margin",
+      "description": "Results scored this far below the threshold are still kept (the classifier's uncertainty band).",
+      "default": 0
+    },
+    "sketches": {
+      "type": "boolean",
+      "title": "Result sketches",
+      "description": "Show the classifier a short sketch of each result instead of only its size.",
+      "default": true
+    },
+    "redact": {
+      "type": "boolean",
+      "title": "Redact secrets",
+      "description": "Replace API keys, tokens and passwords with placeholders before anything is sent to the classifier.",
+      "default": true
+    },
+    "markRemovedCalls": {
+      "type": "boolean",
+      "title": "Mark removed calls",
+      "description": "Append a note to an assistant message whose tool calls were archived, so later turns do not mistake narration for work still in context.",
+      "default": true
+    },
+    "autoRetrieve": {
+      "type": "boolean",
+      "title": "Automatic retrieval",
+      "description": "Before each prompt, search the archive and hand the model the best exact matches as retrieved context.",
+      "default": true
+    },
+    "retrieveBudgetChars": {
+      "type": "number",
+      "title": "Retrieval budget (chars)",
+      "description": "Most characters of archived content retrieved per prompt (the host caps all hidden context at 32000).",
+      "default": 6000
     },
     "preserveRecentMessages": {
       "type": "number",
