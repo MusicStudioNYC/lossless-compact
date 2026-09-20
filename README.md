@@ -43,8 +43,10 @@ so it can grep or read any removed message itself.
 
 Measured (docs/evals.md): on the eight adversarial scenarios upstream's
 default deletes 4 of 6 labelled must-keep results and 24 of 27 probes for a
-97 % reduction; ours with Jev drops none and loses nothing at 91 %, and on
-twelve real 100k–330k-token sessions removes ~52 % (heuristic, no key: ~49 %).
+97 % reduction; ours with Jev drops none and loses nothing at 87 %, and on
+twelve real 100k–330k-token sessions removes ~49 % (heuristic, no key: ~46 %).
+Claude Code's own `/compact` summary keeps no must-keep verbatim and loses 13
+of 27 probes for good, in 82 s per compaction against 47 ms here.
 
 ## Install in Claude Code
 

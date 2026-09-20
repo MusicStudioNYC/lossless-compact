@@ -18,10 +18,10 @@ TYPESAFE_API_KEY=… npm run eval -- --record   # ask Jev for cassette misses an
 | Mode | What runs | Needs |
 | --- | --- | --- |
 | `NO_COMPACTION` | identity | – |
-| `CLAUDE_NATIVE_COMPACTION` | the host's summary | a live Claude Code session; not runnable offline (reported as n/a) |
+| `CLAUDE_NATIVE_COMPACTION` | a Claude-Code-style summary (`claude -p --model sonnet`, or the API) replaces the history | `--native`; a `claude` binary or `ANTHROPIC_API_KEY` |
 | `UPSTREAM_FAST_JEV` | upstream `compact()` at threshold 0.5 | cassette or key |
 | `OURS_HEURISTIC` | `optimize()` with the offline heuristic classifier | – |
-| `OURS_JEV` | `optimize()` with Jev, `useful` wording, threshold 0.15 | cassette or key |
+| `OURS_JEV` | `optimize()` with Jev, `useful` wording, threshold 0.35 | cassette or key |
 | `OURS_JEV_UPSTREAM_WORDING` | `optimize()` with Jev, upstream wording | cassette or key |
 
 Jev answers are recorded per case in `cassette.json`, keyed by a canonical hash
@@ -102,6 +102,13 @@ Upstream's headline reduction is deletion: two thirds of the labelled
 must-keeps and 24 of 27 probes are gone for good. Ours never loses a probe
 (everything is archived) and, with Jev, never drops a must-keep.
 
+Since the live smoke test (2026-09-20) a removed call leaves a one-line marker
+naming its archive id even when its message had no narration (Claude Code's
+usual shape), so the same cassettes now give 86.5 % adversarial / 48.9 % real
+for Jev and 88.1 % / 46.4 % for the heuristic; the ids the model can restore
+from are the cost. Fidelity columns are unchanged. The tables below predate
+the markers.
+
 Threshold sweep for OURS_JEV from the same cassettes (adversarial / 12 real
 sessions, false drops on the adversarial labels):
 
@@ -129,7 +136,9 @@ Real-session fidelity is unlabelled so far (follow-ups).
 Exact = substring scoring; judge = Sonnet reading the *active* compacted
 context and marking each ground-truth item verbatim / paraphrased / absent
 (the fair scoring for a paraphrasing summary; ~6 % noisy — it marked 2/32
-probes lost on the uncompacted transcript).
+probes and 17/279 droppable items absent on the uncompacted transcript). It
+never marked a verbatim mode's probe as `paraphrased`, and every native
+summary quoted the case's constraint sentence word for word (5/5 active).
 
 | Mode | Compacted to | Must-keeps lost (exact) | Must-keeps lost (judge) | Probes recoverable (exact) | Probes in active context (judge) | Droppable content still present (judge) | Verbatim | Time / compaction |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: |
@@ -149,6 +158,36 @@ back (2 of 3 evicted needles returned through prompt retrieval). Upstream is
 worst on every axis. Open question for real sessions: a summary's recall at
 200k+ tokens, to be answered once ~5 real sessions are labelled.
 
+## Live smoke test (2026-09-20, Claude Code 2.1.278, headless `-p`)
+
+Plugin loaded with `--plugin-dir .` and `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1`;
+the session was driven with `claude -p --resume` turns (Sonnet 5, 1M window,
+so the host's own auto-compact never intervened). Found and fixed on the way:
+the first compaction of every session fell back to the built-in summary
+(missing `index.json` read as an error), removed calls left no marker
+because Claude Code puts each call in its own text-less message, and
+retrieval handed over the head of a 40k-char record rather than the slice
+that matched. After the fixes:
+
+| Step | Result |
+| --- | --- |
+| `session.compact` on 258,102 tokens (34 messages, 9 reads) | Jev 1 request / 400 ms; kept 19/34 messages, archived 8 interactions (~94k tokens); host reports 258,102 → 48,822 tokens in **819 ms** ("a hook's 19 messages stand; core never ran") |
+| Same session, built-in summary (before the index fix) | 293,863 → 7,715 tokens in 135 s; 255,089 → 5,605 in 93 s |
+| Compaction note | inserted as message 2, naming the snapshot, the archive dir and the raw `~/.claude/projects/…/<session>.jsonl` (found from inside the sandbox) |
+| `.context-os/` | `archive/<session>/index.json` + one 376 KB shard; `snapshots/<session>/<compaction>.json` (1.0 MB) |
+| `/context` | intercepts the built-in command: host usage grid, then our status (classifier `jev`, last compaction, 38 records); `list`, `why`, `restore` answer in ~10 ms |
+| Prompt retrieval | "what fields does the FsEntry type have…" → `e_777f…` (the d.ts chunk holding the definition) in 126 ms, excerpt at lines 3716–3747; the model answered from it and said so |
+| `turn.complete` auto-trigger | fires and `shouldCompact` is true at 293k, but `$.session.compact()` is "not available in a headless (-p / SDK) session yet"; the hook logs and carries on. **Interactive verification still open.** |
+
+Retrieval check (`npx tsx scripts/retrieval-check.ts --dataset datasets/v1`:
+compact with the heuristic, then ask the archive with each case's final
+prompt): 2 of the 3 evicted needles come back (`54329` for "can't reach
+Postgres", `UNMET PEER DEPENDENCY zod` for "zod type error"; `MAX_UPLOAD_MB`
+for "uploads of 30MB failing" is beyond lexical retrieval), no junk on the
+five cases with nothing evicted. The ranker now weights terms the user spelled
+like code three times, collapses records archived twice, and returns nothing
+for a prompt made of prose alone.
+
 ## Heuristic results (2026-09-20, no Jev)
 
 Adversarial set (8 cases) and 12 real sessions (98k–330k tokens each, the
@@ -167,14 +206,7 @@ dependency warning) — a semantic call the Jev classifier is for; they remain
 recoverable from the archive. Two other needles were caught deterministically
 (a user quoting an id from a result; a later reference to an error line).
 
-Retrieval check (the final user prompt of each adversarial case against the
-archive after compaction, `scratch`-style script, not yet a report column):
-2 of the 3 evicted needles come back through `rehydrateForPrompt` on the
-prompt alone (`POSTGRES_PORT=54329` for "can't reach Postgres", the
-`UNMET PEER DEPENDENCY zod` line for "zod type error"); the third
-(`MAX_UPLOAD_MB = 25` for "uploads of 30MB failing") is beyond lexical
-retrieval because "upload" is common in that transcript. No junk was
-retrieved on the five cases whose needle was already active.
+Retrieval: see the smoke-test section above (`scripts/retrieval-check.ts`).
 
 Two engine bugs were found by the harness on its first runs: dropped results
 surviving because of a vacuous `[].every`, and hard-protecting every result a
