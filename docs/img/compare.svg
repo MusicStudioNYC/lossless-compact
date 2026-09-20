@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="276" viewBox="0 0 880 276" role="img" aria-label="What survives a compaction">
+<title>What survives a compaction</title>
+<style>text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;fill:#1f2328}
+.title{font-size:15px;font-weight:600}.sub{font-size:12px;fill:#52514e}.head{font-size:11.5px;fill:#52514e}
+.row{font-size:13px}.rowsub{font-size:11px;fill:#898781}.val{font-size:12px;font-variant-numeric:tabular-nums}
+.tick{font-size:11px;fill:#898781}.key{font-size:11px;fill:#52514e}.grid{stroke:#e1e0d9;stroke-width:1}</style>
+<text x="16" y="24" class="title">What survives a compaction</text>
+<text x="16" y="43" class="sub">8 adversarial cases, 332k tokens before compaction · higher is better</text>
+<line x1="16" x2="864" y1="94" y2="94" class="grid"/>
+<text x="208" y="72" class="head">Tokens</text>
+<text x="208" y="86" class="head">removed</text>
+<text x="374" y="72" class="head">Must-keeps kept</text>
+<text x="374" y="86" class="head">verbatim</text>
+<text x="540" y="72" class="head">Probes still</text>
+<text x="540" y="86" class="head">recoverable</text>
+<text x="706" y="72" class="head">Droppable content</text>
+<text x="706" y="86" class="head">removed (judge)</text>
+<text x="16" y="117" class="row">context-os + Jev</text><text x="16" y="131" class="rowsub">archives, keepThreshold 0.35</text>
+<rect x="208" y="106" width="108" height="14" fill="#f0efec"/>
+<path d="M208 106h95a4 4 0 0 1 4 4v6a4 4 0 0 1 -4 4h-95z" fill="#2a78d6"/>
+<text x="324" y="117" class="val">91%</text>
+<rect x="374" y="106" width="108" height="14" fill="#f0efec"/>
+<path d="M374 106h104a4 4 0 0 1 4 4v6a4 4 0 0 1 -4 4h-104z" fill="#2a78d6"/>
+<text x="490" y="117" class="val">6 / 6</text>
+<rect x="540" y="106" width="108" height="14" fill="#f0efec"/>
+<path d="M540 106h104a4 4 0 0 1 4 4v6a4 4 0 0 1 -4 4h-104z" fill="#2a78d6"/>
+<text x="656" y="117" class="val">27 / 27</text>
+<rect x="706" y="106" width="108" height="14" fill="#f0efec"/>
+<path d="M706 106h99a4 4 0 0 1 4 4v6a4 4 0 0 1 -4 4h-99z" fill="#2a78d6"/>
+<text x="822" y="117" class="val">95%</text>
+<text x="16" y="153" class="row">context-os, heuristic</text><text x="16" y="167" class="rowsub">archives, no key, no network</text>
+<rect x="208" y="142" width="108" height="14" fill="#f0efec"/>
+<path d="M208 142h96a4 4 0 0 1 4 4v6a4 4 0 0 1 -4 4h-96z" fill="#2a78d6"/>
+<text x="324" y="153" class="val">93%</text>
+<rect x="374" y="142" width="108" height="14" fill="#f0efec"/>
+<path d="M374 142h50a4 4 0 0 1 4 4v6a4 4 0 0 1 -4 4h-50z" fill="#2a78d6"/>
+<text x="490" y="153" class="val">3 / 6</text>
+<rect x="540" y="142" width="108" height="14" fill="#f0efec"/>
+<path d="M540 142h104a4 4 0 0 1 4 4v6a4 4 0 0 1 -4 4h-104z" fill="#2a78d6"/>
+<text x="656" y="153" class="val">27 / 27</text>
+<rect x="706" y="142" width="108" height="14" fill="#f0efec"/>
+<path d="M706 142h87a4 4 0 0 1 4 4v6a4 4 0 0 1 -4 4h-87z" fill="#2a78d6"/>
+<text x="822" y="153" class="val">84%</text>
+<text x="16" y="189" class="row">Claude Code /compact</text><text x="16" y="203" class="rowsub">summary written by Sonnet</text>
+<rect x="208" y="178" width="108" height="14" fill="#f0efec"/>
+<path d="M208 178h93a4 4 0 0 1 4 4v6a4 4 0 0 1 -4 4h-93z" fill="#b3b2ab"/>
+<text x="324" y="189" class="val">90%</text>
+<rect x="374" y="178" width="108" height="14" fill="#f0efec"/>
+
+<text x="490" y="189" class="val">0 / 6</text>
+<rect x="540" y="178" width="108" height="14" fill="#f0efec"/>
+<path d="M540 178h52a4 4 0 0 1 4 4v6a4 4 0 0 1 -4 4h-52z" fill="#b3b2ab"/>
+<text x="656" y="189" class="val">14 / 27</text>
+<rect x="706" y="178" width="108" height="14" fill="#f0efec"/>
+<path d="M706 178h73a4 4 0 0 1 4 4v6a4 4 0 0 1 -4 4h-73z" fill="#b3b2ab"/>
+<text x="822" y="189" class="val">71%</text>
+<text x="16" y="225" class="row">upstream fast-jev</text><text x="16" y="239" class="rowsub">deletes, keepThreshold 0.5</text>
+<rect x="208" y="214" width="108" height="14" fill="#f0efec"/>
+<path d="M208 214h101a4 4 0 0 1 4 4v6a4 4 0 0 1 -4 4h-101z" fill="#b3b2ab"/>
+<text x="324" y="225" class="val">97%</text>
+<rect x="374" y="214" width="108" height="14" fill="#f0efec"/>
+<path d="M374 214h32a4 4 0 0 1 4 4v6a4 4 0 0 1 -4 4h-32z" fill="#b3b2ab"/>
+<text x="490" y="225" class="val">2 / 6</text>
+<rect x="540" y="214" width="108" height="14" fill="#f0efec"/>
+<path d="M540 214h8a4 4 0 0 1 4 4v6a4 4 0 0 1 -4 4h-8z" fill="#b3b2ab"/>
+<text x="656" y="225" class="val">3 / 27</text>
+<rect x="706" y="214" width="108" height="14" fill="#f0efec"/>
+<path d="M706 214h76a4 4 0 0 1 4 4v6a4 4 0 0 1 -4 4h-76z" fill="#b3b2ab"/>
+<text x="822" y="225" class="val">74%</text>
+<rect x="16" y="257" width="10" height="10" rx="2" fill="#2a78d6"/><text x="31" y="266" class="key">context-os</text><rect x="108" y="257" width="10" height="10" rx="2" fill="#b3b2ab"/><text x="123" y="266" class="key">others</text>
+</svg>

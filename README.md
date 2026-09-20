@@ -41,12 +41,69 @@ snapshot, the archive and the raw Claude Code session log
 (`~/.claude/projects/…/<session>.jsonl`, which compaction never modifies) are,
 so it can grep or read any removed message itself.
 
-Measured (docs/evals.md): on the eight adversarial scenarios upstream's
-default deletes 4 of 6 labelled must-keep results and 24 of 27 probes for a
-97 % reduction; ours with Jev drops none and loses nothing at 87 %, and on
-twelve real 100k–330k-token sessions removes ~49 % (heuristic, no key: ~46 %).
-Claude Code's own `/compact` summary keeps no must-keep verbatim and loses 13
-of 27 probes for good, in 82 s per compaction against 47 ms here.
+## How it compares
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/compare-dark.svg">
+  <img alt="What survives a compaction: context-os with Jev removes 91% of tokens, keeps 6 of 6 must-keep results verbatim, keeps all 27 probes recoverable and removes 95% of droppable content; the heuristic 93%, 3 of 6, 27 of 27, 84%; Claude Code's /compact summary 90%, 0 of 6, 14 of 27, 71%; upstream fast-jev 97%, 2 of 6, 3 of 27, 74%." src="docs/img/compare.svg" width="880">
+</picture>
+
+Eight adversarial scenarios, 332k tokens in all — a port that only ever
+appeared in a `cat .env.example` result, a constraint stated late, an
+approach the user rejected, a root cause that looks obsolete, a needle in
+pages of log output — each compacted once by every mode. Every scenario
+labels the tool results that must survive and plants probes: exact strings
+that must still be findable afterwards. The first three columns are exact substring scores; the
+last is a Sonnet judge reading the compacted context (the only fair way to
+score a summary, and ~6 % noisy). Method and full tables:
+[docs/evals.md](docs/evals.md).
+
+- **Same reduction, nothing lost.** `/compact` and context-os both cut the
+  context by ~90 %. The summary keeps none of the six must-keeps verbatim and
+  loses 13 of 27 probes for good; context-os keeps all six as the original
+  bytes and can bring any of the 27 back by id. Asked more loosely, the judge
+  finds all six must-keeps *mentioned* in the summary, paraphrased — a
+  summary's port number or id is as reliable as the summarizer.
+- **Less junk carried.** 29 % of the content labelled droppable is still in
+  the summary; 5 % in ours, which is the judge's noise floor.
+- **Every summary rewrote everything** (8/8). context-os never rewrites a
+  byte: a compacted transcript is still greppable, diffable and quotable.
+- **The heuristic is the no-key fallback.** Same reduction, no network; it
+  misses three of the six needles that nothing later refers to — the semantic
+  call Jev is for — but archives them, so `/context restore` or prompt
+  retrieval brings them back.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/latency-dark.svg">
+  <img alt="Time per compaction on a log scale: context-os with Jev 528 ms, the heuristic 40 ms, Claude Code's /compact summary 82 s, upstream fast-jev 305 ms." src="docs/img/latency.svg" width="880">
+</picture>
+
+A summary is one full-context model call: 82 s per compaction on these
+≤ 70k-token cases (50–112 s), and 93–135 s on a real 255–294k-token session.
+context-os + Jev took ~0.5 s here including the Jev round trips (the engine
+itself is ~47 ms) and 819 ms end-to-end on that same real session
+(258k → 49k tokens); the heuristic, 40 ms. Jev bills a few small requests per
+compaction — under a cent. On real Claude Code sessions of 100k–330k tokens
+context-os removes ~49 % with Jev and ~46 % with the heuristic; how a
+summary's recall holds up past 200k tokens is the open question, answered
+once a few of those sessions are labelled.
+
+### The upstream project
+
+context-os is a fork of
+[tamaratran/fast-jev-compaction](https://github.com/tamaratran/fast-jev-compaction),
+and the idea it stands on is theirs: instead of asking a frontier model to
+rewrite the conversation, ask [Jev](https://typesafe.ai), a small, fast
+classifier, one question per tool result — will this be needed again? — and
+act on the answers. That is what makes a compaction cost milliseconds and
+fractions of a cent, its `compact()` engine still ships here unchanged, and
+their issue tracker did much of the calibration work this fork picks up
+(threshold sweeps, result previews, the narration-marker bug). On the same
+cases their default removes more, 97 %, and with it four of the six
+must-keeps and 24 of the 27 probes, because a deleted result is gone. The
+difference is the archive, the deterministic protections and a calibrated
+threshold; [UPSTREAM.md](UPSTREAM.md) lists everything kept, fixed and
+diverged.
 
 ## Install in Claude Code
 
@@ -179,7 +236,8 @@ npm run eval -- --dataset datasets/v1
 
 Every report scores token reduction next to must-keep false drops, probe
 retention (active / recoverable from the archive), and transcript validity.
-Numbers so far are in [docs/evals.md](docs/evals.md).
+Numbers so far are in [docs/evals.md](docs/evals.md); `npm run charts`
+redraws the two figures above from the newest reports.
 
 ## Development
 

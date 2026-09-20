@@ -11,6 +11,7 @@ npm run eval -- --dataset datasets/v1     # all modes, report under reports/<tim
 npm run eval -- --modes OURS_HEURISTIC,NO_COMPACTION --filter needle
 npm run eval -- --threshold 0.15 --margin 0.05 --recent 6
 TYPESAFE_API_KEY=… npm run eval -- --record   # ask Jev for cassette misses and save cassettes
+npm run charts                            # redraw the README figures (docs/img/) from the newest reports
 ```
 
 ## Modes

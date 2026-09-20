@@ -28,7 +28,8 @@
     "eval": "tsx scripts/eval.ts",
     "capture": "tsx scripts/capture-sessions.ts",
     "adversarial": "tsx scripts/make-adversarial.ts",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "charts": "tsx scripts/charts.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

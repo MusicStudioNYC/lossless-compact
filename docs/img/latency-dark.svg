@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="244" viewBox="0 0 880 244" role="img" aria-label="Time per compaction">
+<title>Time per compaction</title>
+<style>text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;fill:#f0f0ee}
+.title{font-size:15px;font-weight:600}.sub{font-size:12px;fill:#c3c2b7}.head{font-size:11.5px;fill:#c3c2b7}
+.row{font-size:13px}.rowsub{font-size:11px;fill:#898781}.val{font-size:12px;font-variant-numeric:tabular-nums}
+.tick{font-size:11px;fill:#898781}.key{font-size:11px;fill:#c3c2b7}.grid{stroke:#30363d;stroke-width:1}</style>
+<text x="16" y="24" class="title">Time per compaction</text>
+<text x="16" y="43" class="sub">same cases, log scale · context-os + Jev is ~160× faster than a summary, the heuristic ~2,100×</text>
+<line x1="208.0" x2="208.0" y1="60" y2="208" class="grid"/>
+<text x="208" y="226" class="tick" text-anchor="middle">10 ms</text>
+<line x1="336.0" x2="336.0" y1="60" y2="208" class="grid"/>
+<text x="336" y="226" class="tick" text-anchor="middle">100 ms</text>
+<line x1="464.0" x2="464.0" y1="60" y2="208" class="grid"/>
+<text x="464" y="226" class="tick" text-anchor="middle">1 s</text>
+<line x1="592.0" x2="592.0" y1="60" y2="208" class="grid"/>
+<text x="592" y="226" class="tick" text-anchor="middle">10 s</text>
+<line x1="720.0" x2="720.0" y1="60" y2="208" class="grid"/>
+<text x="720" y="226" class="tick" text-anchor="middle">100 s</text>
+<text x="16" y="83" class="row">context-os + Jev</text><text x="16" y="97" class="rowsub">engine + live Jev requests</text>
+<line x1="406.4" x2="445.3" y1="79" y2="79" stroke="#3987e5" stroke-width="2" stroke-linecap="round" opacity="0.45"/>
+<circle cx="428.5" cy="79" r="6" fill="#3987e5" stroke="#0d1117" stroke-width="2"/>
+<text x="457.27337110735033" y="83" class="val">528 ms</text>
+<text x="16" y="119" class="row">context-os, heuristic</text><text x="16" y="133" class="rowsub">engine only, no network</text>
+<line x1="263.2" x2="302.8" y1="115" y2="115" stroke="#3987e5" stroke-width="2" stroke-linecap="round" opacity="0.45"/>
+<circle cx="284.4" cy="115" r="6" fill="#3987e5" stroke="#0d1117" stroke-width="2"/>
+<text x="314.76642425526325" y="119" class="val">40 ms</text>
+<text x="16" y="155" class="row">Claude Code /compact</text><text x="16" y="169" class="rowsub">one full-context model call</text>
+<line x1="681.0" x2="726.4" y1="151" y2="151" stroke="#5a5a57" stroke-width="2" stroke-linecap="round" opacity="0.45"/>
+<circle cx="709.2" cy="151" r="6" fill="#5a5a57" stroke="#0d1117" stroke-width="2"/>
+<text x="738.4466287236846" y="155" class="val">82 s</text>
+<text x="16" y="191" class="row">upstream fast-jev</text><text x="16" y="205" class="rowsub">engine + live Jev request</text>
+<line x1="378.0" x2="439.9" y1="187" y2="187" stroke="#5a5a57" stroke-width="2" stroke-linecap="round" opacity="0.45"/>
+<circle cx="398.0" cy="187" r="6" fill="#5a5a57" stroke="#0d1117" stroke-width="2"/>
+<text x="451.88160075143594" y="191" class="val">305 ms</text>
+<rect x="16" y="225" width="10" height="10" rx="2" fill="#3987e5"/><text x="31" y="234" class="key">context-os</text><rect x="108" y="225" width="10" height="10" rx="2" fill="#5a5a57"/><text x="123" y="234" class="key">others</text>
+</svg>
