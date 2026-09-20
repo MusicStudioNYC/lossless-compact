@@ -1,19 +1,19 @@
-# lossless-compact
+# Lossless Compact
 
-## Compacts your coding agent's memory without making it forget anything.
+### Shrink your coding agent's context by ~90 % — without it forgetting a thing.
 
-Hi — this is **lossless-compact**, a plugin for Claude Code (and Cursor,
-through the same extension). Here's the one thing to know: when a long
-coding session gets too big for the model's context window, your agent has
-to clear some of it out to keep going. This plugin changes *how* that
-clearing happens, so nothing important quietly disappears.
+## We've all been there…
 
-## The problem this fixes
+Your Claude Code session gets long. You have two choices, and both hurt:
 
-Right now, when Claude Code's context fills up, it runs `/compact`: it asks
-the model to write a summary of everything so far, throws away the original
-transcript, and carries on with just the summary. That sounds reasonable
-until you notice what it actually costs you:
+| | Cost | Quality | |
+| :-- | :-: | :-: | :-- |
+| **Let the chat grow** | ❌ | ❌ | Every turn re-sends the whole history, so each one costs more than the last — and the longer it gets, the sloppier the answers. |
+| **Run `/compact`** | ✅ | ❌ | Cheaper — but now the model works from a summary of your history that it wrote from memory, and quality drops *further*. The exact port number, file path or error you needed? Paraphrased or gone, and nobody tells you which. |
+
+That is what `/compact` is: it asks the model to write a summary of
+everything so far, throws away the original transcript, and carries on with
+just the summary. Which costs you more than it looks:
 
 - **It rewrites your history in its own words.** The exact port number from
   a `.env` file, the file path from ten tool calls ago, the precise wording
@@ -27,11 +27,19 @@ until you notice what it actually costs you:
   50 seconds to a couple of minutes, because it's a full model call over the
   whole context.
 
-lossless-compact does the same job — freeing up space — completely
-differently: it keeps the exact bytes of everything that still matters, and
-moves everything else into a searchable archive instead of deleting it. If
-it archived something you needed, you get it back verbatim, on request, in
-milliseconds. Nothing is ever paraphrased.
+## Meet Lossless Compact
+
+| | Cost | Quality | |
+| :-- | :-: | :-: | :-- |
+| **Compact losslessly** | ✅ | ✅ | The same ~90 % smaller context — and nothing rewritten. What stays is the original bytes; what goes is archived, exact and searchable, and back in front of the model in one command. |
+
+lossless-compact is a plugin for Claude Code (and Cursor, through the same
+extension). It takes over compaction — `/compact`, auto-compaction, all of
+it — and does the job completely differently: it keeps the exact bytes of
+everything that still matters, and moves everything else into a searchable
+archive instead of deleting it. If it archived something you needed, you get
+it back verbatim, on request, in milliseconds. Nothing is ever paraphrased,
+and it runs in under a second instead of a minute or two.
 
 ## See it side by side
 
