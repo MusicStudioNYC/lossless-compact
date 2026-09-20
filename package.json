@@ -1,7 +1,7 @@
 {
-  "name": "fast-jev-compaction",
-  "version": "0.2.0",
-  "description": "Context optimizer for coding agents: verbatim, reversible, provenance-tracked compaction (forked from fast-jev-compaction).",
+  "name": "lossless-compact",
+  "version": "0.5.0",
+  "description": "Lossless compaction for coding agents: nothing summarized, everything removed archived verbatim with provenance and restorable by id (forked from fast-jev-compaction).",
   "type": "module",
   "license": "MIT",
   "engines": {

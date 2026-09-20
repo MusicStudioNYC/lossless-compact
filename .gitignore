@@ -4,5 +4,5 @@ dist
 demo/JevDemo/build
 datasets/real/
 reports/
-.context-os/
+.lossless-compact/
 scratch/

@@ -106,7 +106,7 @@ export function retrievedBlock(record: ArchiveRecord, maxChars?: number, terms?:
 }
 
 export const REHYDRATION_PREFACE =
-  'context-os retrieved the following exact archived content because it looks relevant to this prompt. It was removed from the active context earlier and was not continuously present; /context why <id> explains why, /context restore <id> brings back the whole record.';
+  'lossless-compact retrieved the following exact archived content because it looks relevant to this prompt. It was removed from the active context earlier and was not continuously present; /context why <id> explains why, /context restore <id> brings back the whole record.';
 
 /** Picks archived records for a prompt within the budget; empty when nothing is relevant enough. */
 export async function rehydrateForPrompt(

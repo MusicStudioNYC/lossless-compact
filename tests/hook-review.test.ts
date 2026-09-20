@@ -4,7 +4,7 @@ import type { ClassifierScores } from '../src/core/actions.js';
 import type { Classifier } from '../src/classifiers/types.js';
 import { optimize, type OptimizeResult } from '../src/engine/optimize.js';
 import type { Message } from '../src/types.js';
-import { REVIEW_ANSWERS, reviewKeepNothing, suspectCalibration, trustedForSession } from '../hooks/context-os.js';
+import { REVIEW_ANSWERS, reviewKeepNothing, suspectCalibration, trustedForSession } from '../hooks/lossless-compact.js';
 
 const message = (role: Message['role'], text: string, extra: Partial<Message> = {}): Message => ({ role, text, toolUses: [], ...extra });
 const call = (id: string, tool: string, input: Record<string, unknown>, text: string): Message =>
@@ -133,7 +133,7 @@ describe('reviewKeepNothing', () => {
       expect(asked[0]).toContain('kept none of the 6 results it scored');
       expect(asked[0]).toContain('could not confirm that is right (not enough context)');
       expect(await trustedForSession($, 's')).toBe(answer === REVIEW_ANSWERS.trust);
-      expect(store.has('context-os:trust:s')).toBe(answer === REVIEW_ANSWERS.trust);
+      expect(store.has('lossless-compact:trust:s')).toBe(answer === REVIEW_ANSWERS.trust);
     }
     expect(decisions).toEqual(['proceed', 'proceed', 'fallback', 'fallback']);
   });

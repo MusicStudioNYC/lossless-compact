@@ -1,13 +1,13 @@
 # Architecture
 
-ContextOS treats an agent's context window as scarce fast memory, the verbatim
+lossless-compact treats an agent's context window as scarce fast memory, the verbatim
 archive as abundant slow memory, and durable memory as compact structured
 state. The engine moves context between those tiers without paraphrasing
 anything and without making anything unrecoverable.
 
 ```
 host transcript (Claude Code SessionMessage[])
-        │  hooks/context-os.ts  (adapter: in/out mapping, $.fs archive, /context)
+        │  hooks/lossless-compact.ts  (adapter: in/out mapping, $.fs archive, /context)
         ▼
    Message[]  ──►  buildLedger  ──►  NormalizedEvent[] with stable ids
         │
@@ -28,7 +28,7 @@ host transcript (Claude Code SessionMessage[])
 | --- | --- | --- |
 | `src/*.ts` (upstream) | anywhere | Kept as-is so upstream patches merge; the Jev pruner is now one classifier. |
 | `src/core/` | anywhere | hash, events/ledger, action taxonomy, rules, dependencies, sketches, redaction, policy. **No Node imports.** |
-| `src/classifiers/` | anywhere | `Classifier` interface; `jev` (upstream protocol + salvage), `heuristic` (offline), `replay` (cassettes). |
+| `src/classifiers/` | anywhere | `Classifier` interface; `jev` (upstream protocol + salvage), `heuristic` (a hand-written, deterministic ruleset; offline, no model), `replay` (cassettes). |
 | `src/archive/` | anywhere | `ArchiveStore` contract, `MemoryArchive`, `FileArchive` over a 4-method `TextFs`. |
 | `src/engine/` | anywhere | `optimize()` — the orchestration. |
 | `src/node/` | Node only | Claude Code JSONL transcript loader, `nodeFs`, eval runner. The only place `node:*` is imported. |
@@ -104,8 +104,8 @@ reranker are the planned next step (plan §14).
 ## Storage layout (FileArchive)
 
 ```
-<project>/.context-os/archive/<sessionId>/index.json          summaries + shard names
-<project>/.context-os/archive/<sessionId>/<compactionId>.json  records (≤ 3.5 MiB per shard)
+<project>/.lossless-compact/archive/<sessionId>/index.json          summaries + shard names
+<project>/.lossless-compact/archive/<sessionId>/<compactionId>.json  records (≤ 3.5 MiB per shard)
 ```
 
 ## Evals (`src/node/evals`, `npm run eval`)

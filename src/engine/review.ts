@@ -94,7 +94,7 @@ const ANSWER_FORMAT =
  */
 export function reviewQuestion(candidates: readonly ReviewCandidate[], threshold: number): string {
   return [
-    `context-os, the compaction plugin, is about to remove every tool result it scored in this conversation: each of the ${candidates.length} below scored under the keep threshold (${threshold}) and nothing later referred to them. Before it does, judge that against what this conversation is doing and what is likely to come next.`,
+    `lossless-compact, the compaction plugin, is about to remove every tool result it scored in this conversation: each of the ${candidates.length} below scored under the keep threshold (${threshold}) and nothing later referred to them. Before it does, judge that against what this conversation is doing and what is likely to come next.`,
     'Everything removed stays in an exact archive the assistant can search and restore by id, so keep only a result whose exact content — a value, an error line, a file\'s current text — the next turns will need at hand. "drop_all" when none does; "keep_some" with the ids when a few do; "unsure" only if the list is unreadable.',
     '',
     'Candidates (id · tool · input · size · classifier score · sketch):',

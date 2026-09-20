@@ -4,9 +4,9 @@ import {
   engineFs,
   reportLines,
   resolvedClassifierName,
-  resolveContextOsConfig,
+  resolveLosslessCompactConfig,
   runContextCommand,
-} from '../hooks/context-os.ts';
+} from '../hooks/lossless-compact.ts';
 import { MemoryArchive } from '../src/archive/memory-store.js';
 import type { ClassifierScores } from '../src/core/actions.js';
 import type { Classifier } from '../src/classifiers/types.js';
@@ -25,13 +25,13 @@ function result(id: string, text: string, isError = false): Message {
   return message('user', '', { toolResults: [{ tool_use_id: id, text, isError }] });
 }
 
-describe('resolveContextOsConfig', () => {
+describe('resolveLosslessCompactConfig', () => {
   it('applies defaults for an empty options object', () => {
-    const config = resolveContextOsConfig({});
+    const config = resolveLosslessCompactConfig({});
     expect(config).toMatchObject({
       classifier: 'auto',
       questionStyle: 'useful',
-      archiveDir: '.context-os',
+      archiveDir: '.lossless-compact',
       safetyMargin: 0,
       sketches: true,
       redact: true,
@@ -45,20 +45,20 @@ describe('resolveContextOsConfig', () => {
   });
 
   it('validates the classifier enum and falls back to auto for anything else', () => {
-    expect(resolveContextOsConfig({ classifier: 'bogus' }).classifier).toBe('auto');
-    expect(resolveContextOsConfig({ classifier: 'jev' }).classifier).toBe('jev');
-    expect(resolveContextOsConfig({ classifier: 'heuristic' }).classifier).toBe('heuristic');
-    expect(resolveContextOsConfig({ classifier: 'auto' }).classifier).toBe('auto');
+    expect(resolveLosslessCompactConfig({ classifier: 'bogus' }).classifier).toBe('auto');
+    expect(resolveLosslessCompactConfig({ classifier: 'jev' }).classifier).toBe('jev');
+    expect(resolveLosslessCompactConfig({ classifier: 'heuristic' }).classifier).toBe('heuristic');
+    expect(resolveLosslessCompactConfig({ classifier: 'auto' }).classifier).toBe('auto');
   });
 
   it('validates the questionStyle enum and falls back to useful for anything else', () => {
-    expect(resolveContextOsConfig({ questionStyle: 'bogus' }).questionStyle).toBe('useful');
-    expect(resolveContextOsConfig({ questionStyle: 'upstream' }).questionStyle).toBe('upstream');
-    expect(resolveContextOsConfig({ questionStyle: 'useful' }).questionStyle).toBe('useful');
+    expect(resolveLosslessCompactConfig({ questionStyle: 'bogus' }).questionStyle).toBe('useful');
+    expect(resolveLosslessCompactConfig({ questionStyle: 'upstream' }).questionStyle).toBe('upstream');
+    expect(resolveLosslessCompactConfig({ questionStyle: 'useful' }).questionStyle).toBe('useful');
   });
 
   it('reads archiveDir, safetyMargin and the boolean toggles when given', () => {
-    const config = resolveContextOsConfig({
+    const config = resolveLosslessCompactConfig({
       archiveDir: 'custom-dir',
       safetyMargin: 0.3,
       sketches: false,
@@ -73,15 +73,15 @@ describe('resolveContextOsConfig', () => {
   });
 
   it('ignores a non-string archiveDir and a non-finite safetyMargin', () => {
-    const config = resolveContextOsConfig({ archiveDir: '', safetyMargin: Number.NaN });
-    expect(config.archiveDir).toBe('.context-os');
+    const config = resolveLosslessCompactConfig({ archiveDir: '', safetyMargin: Number.NaN });
+    expect(config.archiveDir).toBe('.lossless-compact');
     expect(config.safetyMargin).toBe(0);
   });
 
   it('leaves keepThreshold absent unless an explicit finite number is given', () => {
-    expect('keepThreshold' in resolveContextOsConfig({})).toBe(false);
-    expect('keepThreshold' in resolveContextOsConfig({ keepThreshold: 'nope' })).toBe(false);
-    expect(resolveContextOsConfig({ keepThreshold: 0.3 }).keepThreshold).toBe(0.3);
+    expect('keepThreshold' in resolveLosslessCompactConfig({})).toBe(false);
+    expect('keepThreshold' in resolveLosslessCompactConfig({ keepThreshold: 'nope' })).toBe(false);
+    expect(resolveLosslessCompactConfig({ keepThreshold: 0.3 }).keepThreshold).toBe(0.3);
   });
 });
 
@@ -272,7 +272,7 @@ describe('runContextCommand', () => {
 });
 
 describe('chooseClassifier', () => {
-  const baseConfig = resolveContextOsConfig({});
+  const baseConfig = resolveLosslessCompactConfig({});
   const fetchFn = async () => ({ status: 200, ok: true, text: '{"answers":{}}' });
 
   it("'auto' without a key falls back to heuristic", () => {

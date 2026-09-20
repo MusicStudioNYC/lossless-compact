@@ -5,7 +5,7 @@
 .row{font-size:13px}.rowsub{font-size:11px;fill:#898781}.val{font-size:12px;font-variant-numeric:tabular-nums}
 .tick{font-size:11px;fill:#898781}.key{font-size:11px;fill:#c3c2b7}.grid{stroke:#30363d;stroke-width:1}</style>
 <text x="16" y="24" class="title">Time per compaction</text>
-<text x="16" y="43" class="sub">same cases, log scale · context-os + Jev is ~160× faster than a summary, the heuristic ~2,100×</text>
+<text x="16" y="43" class="sub">same cases, log scale · lossless-compact + Jev is ~160× faster than a summary, the local ruleset ~2,100×</text>
 <line x1="208.0" x2="208.0" y1="60" y2="208" class="grid"/>
 <text x="208" y="226" class="tick" text-anchor="middle">10 ms</text>
 <line x1="336.0" x2="336.0" y1="60" y2="208" class="grid"/>
@@ -16,11 +16,11 @@
 <text x="592" y="226" class="tick" text-anchor="middle">10 s</text>
 <line x1="720.0" x2="720.0" y1="60" y2="208" class="grid"/>
 <text x="720" y="226" class="tick" text-anchor="middle">100 s</text>
-<text x="16" y="83" class="row">context-os + Jev</text><text x="16" y="97" class="rowsub">engine + live Jev requests</text>
+<text x="16" y="83" class="row">lossless-compact + Jev</text><text x="16" y="97" class="rowsub">engine + live Jev requests</text>
 <line x1="406.4" x2="445.3" y1="79" y2="79" stroke="#3987e5" stroke-width="2" stroke-linecap="round" opacity="0.45"/>
 <circle cx="428.5" cy="79" r="6" fill="#3987e5" stroke="#0d1117" stroke-width="2"/>
 <text x="457.27337110735033" y="83" class="val">528 ms</text>
-<text x="16" y="119" class="row">context-os, heuristic</text><text x="16" y="133" class="rowsub">engine only, no network</text>
+<text x="16" y="119" class="row">lossless-compact, local ruleset</text><text x="16" y="133" class="rowsub">engine only, no network</text>
 <line x1="263.2" x2="302.8" y1="115" y2="115" stroke="#3987e5" stroke-width="2" stroke-linecap="round" opacity="0.45"/>
 <circle cx="284.4" cy="115" r="6" fill="#3987e5" stroke="#0d1117" stroke-width="2"/>
 <text x="314.76642425526325" y="119" class="val">40 ms</text>
@@ -32,5 +32,5 @@
 <line x1="378.0" x2="439.9" y1="187" y2="187" stroke="#5a5a57" stroke-width="2" stroke-linecap="round" opacity="0.45"/>
 <circle cx="398.0" cy="187" r="6" fill="#5a5a57" stroke="#0d1117" stroke-width="2"/>
 <text x="451.88160075143594" y="191" class="val">305 ms</text>
-<rect x="16" y="225" width="10" height="10" rx="2" fill="#3987e5"/><text x="31" y="234" class="key">context-os</text><rect x="108" y="225" width="10" height="10" rx="2" fill="#5a5a57"/><text x="123" y="234" class="key">others</text>
+<rect x="16" y="225" width="10" height="10" rx="2" fill="#3987e5"/><text x="31" y="234" class="key">lossless-compact</text><rect x="108" y="225" width="10" height="10" rx="2" fill="#5a5a57"/><text x="123" y="234" class="key">others</text>
 </svg>

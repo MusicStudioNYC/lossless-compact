@@ -2,7 +2,7 @@
 
 This repository is a fork of **tamaratran/fast-jev-compaction** (MIT). It keeps
 the upstream code, attribution and license, and evolves it into a broader
-context-management layer ("ContextOS / semantic context GC") in which the
+context-management layer (lossless-compact) in which the
 original Jev tool-call pruner is one policy engine among several.
 
 | | |
@@ -78,8 +78,8 @@ _None yet beyond the fork point (upstream has not moved)._
 - Deterministic protections run before the classifier (unresolved errors,
   later references, current files, non-reproducible tools).
 - Exact duplicate interactions are removed without asking the classifier.
-- The hook registers `/context` and stores the archive under `.context-os/`.
-- Plugin renamed `context-os` (manifest and marketplace); the npm package name
+- The hook registers `/context` and stores the archive under `.lossless-compact/`.
+- Plugin renamed `lossless-compact` (manifest and marketplace); the npm package name
   is still `fast-jev-compaction` pending the owner's decision.
 
 ## Known upstream bugs fixed differently

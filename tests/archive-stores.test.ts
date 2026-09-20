@@ -288,7 +288,7 @@ describe('FileArchive', () => {
       ...base,
       async read(path: string) {
         reads.push(path);
-        if (!base.files.has(path)) throw new Error(`context-os: $.fs.read(${path}) failed: ENOENT`);
+        if (!base.files.has(path)) throw new Error(`lossless-compact: $.fs.read(${path}) failed: ENOENT`);
         return base.files.get(path)!;
       },
     };

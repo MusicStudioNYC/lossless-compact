@@ -123,7 +123,7 @@ export function orderAndVerbatim(input: readonly Message[], output: readonly Mes
         continue;
       }
       // A stub keeps a head of the original; anything else is a rewrite.
-      const head = result.text.split('\n[context-os')[0]!.split('\n[fast-jev-compaction')[0]!;
+      const head = result.text.split('\n[lossless-compact')[0]!.split('\n[fast-jev-compaction')[0]!;
       if (!before.text.startsWith(head.replace(/\n$/, ''))) keptVerbatim = false;
     }
   }

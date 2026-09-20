@@ -24,7 +24,7 @@ export interface TextFs {
 }
 
 export interface FileArchiveOptions {
-  /** Directory the archive lives under; `.context-os` by default (relative to the project). */
+  /** Directory the archive lives under; `.lossless-compact` by default (relative to the project). */
   root?: string;
   /** Largest shard file, in characters of JSON. Default 3.5 MiB, under the hook's 4 MiB cap. */
   maxShardChars?: number;
@@ -78,7 +78,7 @@ export class FileArchive implements ArchiveStore {
     private readonly fs: TextFs,
     options: FileArchiveOptions = {},
   ) {
-    this.root = (options.root ?? '.context-os').replace(/[\\/]+$/, '');
+    this.root = (options.root ?? '.lossless-compact').replace(/[\\/]+$/, '');
     this.maxShardChars = options.maxShardChars ?? 3.5 * 1024 * 1024;
   }
 

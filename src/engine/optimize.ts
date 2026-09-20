@@ -159,7 +159,7 @@ export function stubResultText(
       ? `re-run ${call.tool} with the same input to reproduce it, or /context restore ${archiveId}`
       : `/context restore ${archiveId} brings it back verbatim, or re-run the tool`;
   const about = inputSummary(call);
-  return `${head}[context-os archived ${archiveId}: ${what}${about ? ` (${about})` : ''}; ${how}]`;
+  return `${head}[lossless-compact archived ${archiveId}: ${what}${about ? ` (${about})` : ''}; ${how}]`;
 }
 
 /** The note appended to an assistant message whose tool calls were removed. */
@@ -168,7 +168,7 @@ export function removedCallsMarker(removed: readonly { call: ToolCall; archiveId
   // session (Claude Code gives each call its own message), and the
   // compaction note explains the mechanism once.
   const items = removed.map((r) => `${`${r.call.tool} ${inputSummary(r.call)}`.trim()} → ${r.archiveId}`).join('; ');
-  return `[context-os archived ${removed.length} tool call${removed.length === 1 ? '' : 's'} made here: ${items} — out of context; /context restore <id>]`;
+  return `[lossless-compact archived ${removed.length} tool call${removed.length === 1 ? '' : 's'} made here: ${items} — out of context; /context restore <id>]`;
 }
 
 interface Applied {

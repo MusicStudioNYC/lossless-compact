@@ -175,7 +175,7 @@ that matched. After the fixes:
 | `session.compact` on 258,102 tokens (34 messages, 9 reads) | Jev 1 request / 400 ms; kept 19/34 messages, archived 8 interactions (~94k tokens); host reports 258,102 → 48,822 tokens in **819 ms** ("a hook's 19 messages stand; core never ran") |
 | Same session, built-in summary (before the index fix) | 293,863 → 7,715 tokens in 135 s; 255,089 → 5,605 in 93 s |
 | Compaction note | inserted as message 2, naming the snapshot, the archive dir and the raw `~/.claude/projects/…/<session>.jsonl` (found from inside the sandbox) |
-| `.context-os/` | `archive/<session>/index.json` + one 376 KB shard; `snapshots/<session>/<compaction>.json` (1.0 MB) |
+| `.lossless-compact/` | `archive/<session>/index.json` + one 376 KB shard; `snapshots/<session>/<compaction>.json` (1.0 MB) |
 | `/context` | Headless mode returned the host usage text plus our status, but the interactive host renders a native modal and discards appended command text. Fixed after the interactive check: bare `/context` preserves the modal and shows an active/classifier toast; `/context status` prints the full report. `list`, `why`, `restore` answer in ~10 ms. |
 | Prompt retrieval | "what fields does the FsEntry type have…" → `e_777f…` (the d.ts chunk holding the definition) in 126 ms, excerpt at lines 3716–3747; the model answered from it and said so |
 | `turn.complete` auto-trigger | fires and `shouldCompact` is true at 293k, but `$.session.compact()` is "not available in a headless (-p / SDK) session yet"; the hook logs and carries on. **Interactive verification still open.** |

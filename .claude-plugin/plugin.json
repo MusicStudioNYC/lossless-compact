@@ -1,7 +1,7 @@
 {
-  "name": "context-os",
-  "version": "0.4.1",
-  "description": "Verbatim, reversible, provenance-tracked context compaction for Claude Code (Jev or local heuristics); /context to inspect and restore.",
+  "name": "lossless-compact",
+  "version": "0.5.0",
+  "description": "Lossless compaction for Claude Code: nothing is summarized; everything removed is archived verbatim with provenance and restorable by id (Jev or local heuristics). /context to inspect and restore.",
   "license": "MIT",
   "userConfig": {
     "apiKey": {
@@ -40,7 +40,7 @@
       "type": "string",
       "title": "Archive directory",
       "description": "Where evicted context is stored verbatim, relative to the project.",
-      "default": ".context-os"
+      "default": ".lossless-compact"
     },
     "safetyMargin": {
       "type": "number",
@@ -81,7 +81,7 @@
     "snapshot": {
       "type": "boolean",
       "title": "Snapshot before compaction",
-      "description": "Write the exact pre-compaction transcript to .context-os/snapshots/ so any removed message can be read back.",
+      "description": "Write the exact pre-compaction transcript to .lossless-compact/snapshots/ so any removed message can be read back.",
       "default": true
     },
     "noteRemoved": {

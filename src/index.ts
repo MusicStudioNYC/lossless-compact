@@ -6,7 +6,7 @@ export * from './state.js';
 export * from './compact.js';
 export * from './messages.js';
 
-// ContextOS: sandbox-safe core (no Node imports anywhere below).
+// lossless-compact: sandbox-safe core (no Node imports anywhere below).
 export * from './core/hash.js';
 export * from './core/events.js';
 export * from './core/actions.js';

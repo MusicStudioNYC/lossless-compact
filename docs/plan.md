@@ -1,6 +1,6 @@
 # Handoff Plan: Build a High-Fidelity Context Optimizer for Coding Agents
 
-**Working name:** ContextOS / Semantic Context GC  
+**Working name:** ContextOS / Semantic Context GC — shipped as **lossless-compact** (renamed 2026-09-20)  
 **Audience:** Implementation LLM / senior agentic-systems engineer  
 **Date:** 2026-09-19  
 **Primary initial target:** Claude Code  
@@ -66,7 +66,7 @@ Our roadmap must quickly diverge from "Jev chooses tool calls to drop" into a br
 Create:
 
 ```text
-our-org/context-os
+our-org/lossless-compact
 ```
 
 Preserve upstream attribution and MIT license.

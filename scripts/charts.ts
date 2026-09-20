@@ -30,8 +30,8 @@ interface Row {
 }
 
 const ROWS: readonly Row[] = [
-  { mode: 'OURS_JEV', label: 'context-os + Jev', sub: 'archives, keepThreshold 0.35', timed: 'engine + live Jev requests', ours: true },
-  { mode: 'OURS_HEURISTIC', label: 'context-os, heuristic', sub: 'archives, no key, no network', timed: 'engine only, no network', ours: true },
+  { mode: 'OURS_JEV', label: 'lossless-compact + Jev', sub: 'archives, keepThreshold 0.35', timed: 'engine + live Jev requests', ours: true },
+  { mode: 'OURS_HEURISTIC', label: 'lossless-compact, local ruleset', sub: 'no model, no key, no network', timed: 'engine only, no network', ours: true },
   { mode: 'CLAUDE_NATIVE_COMPACTION', label: 'Claude Code /compact', sub: 'summary written by Sonnet', timed: 'one full-context model call', ours: false },
   { mode: 'UPSTREAM_FAST_JEV', label: 'upstream fast-jev', sub: 'deletes, keepThreshold 0.5', timed: 'engine + live Jev request', ours: false },
 ];
@@ -115,7 +115,7 @@ ${body}
 function key(t: Theme, y: number): string {
   return (
     `<rect x="${LEFT}" y="${y - 9}" width="10" height="10" rx="2" fill="${t.ours}"/>` +
-    text(LEFT + 15, y, 'context-os', 'key') +
+    text(LEFT + 15, y, 'lossless-compact', 'key') +
     `<rect x="${LEFT + 92}" y="${y - 9}" width="10" height="10" rx="2" fill="${t.other}"/>` +
     text(LEFT + 107, y, 'others', 'key')
   );
@@ -210,7 +210,7 @@ function latencySvg(report: EvalReport, live: EvalReport | undefined, t: Theme):
   const title = 'Time per compaction';
   const parts = [
     text(LEFT, 24, title, 'title'),
-    text(LEFT, 43, `same cases, log scale · context-os + Jev is ${fmtTimes(summary / jev)} faster than a summary, the heuristic ${fmtTimes(summary / heuristic)}`, 'sub'),
+    text(LEFT, 43, `same cases, log scale · lossless-compact + Jev is ${fmtTimes(summary / jev)} faster than a summary, the local ruleset ${fmtTimes(summary / heuristic)}`, 'sub'),
   ];
   for (const ms of decades) {
     parts.push(

@@ -33,12 +33,12 @@ import {
 /**
  * The Claude Code adapter for the context optimizer. Compaction goes through
  * `optimize` (rules, classifier, archive); the archive lives under the
- * project in `.context-os/`; `/context` inspects and restores it.
+ * project in `.lossless-compact/`; `/context` inspects and restores it.
  */
 
 export type ClassifierChoice = 'auto' | 'jev' | 'heuristic';
 
-export type ContextOsConfig = HookConfig & {
+export type LosslessCompactConfig = HookConfig & {
   classifier: ClassifierChoice;
   questionStyle: JevQuestionStyle;
   archiveDir: string;
@@ -56,7 +56,7 @@ export type ContextOsConfig = HookConfig & {
    * does. Default 120000.
    */
   compactAtTokens: number;
-  /** Write the exact pre-compaction transcript under `.context-os/snapshots/`. */
+  /** Write the exact pre-compaction transcript under `.lossless-compact/snapshots/`. */
   snapshot: boolean;
   /** Insert a note into the compacted transcript saying where the full history is. */
   noteRemoved: boolean;
@@ -65,7 +65,7 @@ export type ContextOsConfig = HookConfig & {
 const DEFAULTS = {
   classifier: 'auto' as ClassifierChoice,
   questionStyle: 'useful' as JevQuestionStyle,
-  archiveDir: '.context-os',
+  archiveDir: '.lossless-compact',
   safetyMargin: 0,
   sketches: true,
   redact: true,
@@ -84,13 +84,13 @@ function optionBoolean(options: PluginOptions, key: string, fallback: boolean): 
   return typeof value === 'boolean' ? value : fallback;
 }
 
-export function resolveContextOsConfig(options: PluginOptions): ContextOsConfig {
+export function resolveLosslessCompactConfig(options: PluginOptions): LosslessCompactConfig {
   const base = resolveHookConfig(options);
   const classifier = options['classifier'];
   const style = options['questionStyle'];
   const dir = options['archiveDir'];
   const margin = options['safetyMargin'];
-  const config: ContextOsConfig = {
+  const config: LosslessCompactConfig = {
     ...base,
     classifier:
       classifier === 'jev' || classifier === 'heuristic' || classifier === 'auto'
@@ -130,7 +130,7 @@ export function resolveContextOsConfig(options: PluginOptions): ContextOsConfig 
  */
 export function shouldCompact(
   context: { tokens?: number; percent?: number; window?: number },
-  config: Pick<ContextOsConfig, 'compactAtTokens' | 'compactAtPercent'>,
+  config: Pick<LosslessCompactConfig, 'compactAtTokens' | 'compactAtPercent'>,
 ): boolean {
   const percent = context.percent ?? 0;
   const tokens =
@@ -162,7 +162,7 @@ export function engineFs($: {
 
 /** Resolves `auto` to the classifier this session can actually use. */
 export function resolvedClassifierName(
-  config: Pick<ContextOsConfig, 'classifier'>,
+  config: Pick<LosslessCompactConfig, 'classifier'>,
   apiKey: string | undefined,
 ): 'jev' | 'heuristic' {
   return config.classifier === 'auto' ? (apiKey ? 'jev' : 'heuristic') : config.classifier;
@@ -170,7 +170,7 @@ export function resolvedClassifierName(
 
 /** Picks the classifier from the config and whether a key is at hand. */
 export function chooseClassifier(
-  config: ContextOsConfig,
+  config: LosslessCompactConfig,
   fetchFn: HookFetch,
   apiKey: string | undefined,
 ): Classifier {
@@ -191,7 +191,7 @@ export interface SessionOptimization {
 /** Runs the optimizer over a session transcript; throws when the classifier cannot run. */
 export async function optimizeSession(
   messages: readonly SessionMessage[],
-  config: ContextOsConfig,
+  config: LosslessCompactConfig,
   classifier: Classifier,
   archive: ArchiveStore,
   sessionId: string,
@@ -219,7 +219,7 @@ export function reportLines(report: OptimizeReport): string[] {
     .map(([rule, n]) => `${rule}=${n}`)
     .join(' ');
   return [
-    `context-os ${report.compactionId}: ${report.classifier}; ~${report.tokens.before}→${report.tokens.after} tokens; archived ${report.tokens.archived} tokens in ${report.actions.ARCHIVE_ONLY + report.actions.KEEP_HEAD_TAIL + report.actions.RERUN_ON_DEMAND + report.actions.DROP_REDUNDANT} units`,
+    `lossless-compact ${report.compactionId}: ${report.classifier}; ~${report.tokens.before}→${report.tokens.after} tokens; archived ${report.tokens.archived} tokens in ${report.actions.ARCHIVE_ONLY + report.actions.KEEP_HEAD_TAIL + report.actions.RERUN_ON_DEMAND + report.actions.DROP_REDUNDANT} units`,
     `actions: ${actions || '(none)'}`,
     `protected: ${protections || '(none)'}; constraints ${report.constraints}; duplicates ${report.duplicates}; unscored ${report.unscored}; secrets redacted ${report.redactedSecrets}`,
   ];
@@ -349,10 +349,10 @@ export function compactionNote(details: {
   const units = `${removed} tool interaction${removed === 1 ? '' : 's'} (~${details.report.tokens.archived.toLocaleString('en-US')} tokens)`;
   const lines = [
     details.summarized
-      ? `[context-os] This conversation was compacted at ${details.at} by Claude Code's built-in summary; the message above is a paraphrase, not the original text. Before the summary was written, context-os (compaction ${details.compactionId}) archived ${units} verbatim${
+      ? `[lossless-compact] This conversation was compacted at ${details.at} by Claude Code's built-in summary; the message above is a paraphrase, not the original text. Before the summary was written, lossless-compact (compaction ${details.compactionId}) archived ${units} verbatim${
           details.snapshotPath ? ' and saved the exact pre-compaction transcript' : ''
         }. If you need anything the summary lost, the full history is on disk:`
-      : `[context-os] This conversation was compacted at ${details.at} (compaction ${details.compactionId}): ${units} were removed from the active context and archived verbatim. Nothing was summarized or paraphrased; user and assistant messages are untouched. If you need any removed message, the full history is on disk:`,
+      : `[lossless-compact] This conversation was compacted at ${details.at} (compaction ${details.compactionId}): ${units} were removed from the active context and archived verbatim. Nothing was summarized or paraphrased; user and assistant messages are untouched. If you need any removed message, the full history is on disk:`,
   ];
   if (details.snapshotPath) {
     lines.push(`- Exact pre-compaction transcript (JSON array of messages): ${details.snapshotPath} — grep it, or read a slice.`);
@@ -439,7 +439,7 @@ export type KeepNothingReview = {
   why: string;
 };
 
-const trustKey = (sessionId: string): string => `context-os:trust:${sessionId}`;
+const trustKey = (sessionId: string): string => `lossless-compact:trust:${sessionId}`;
 
 /** Whether the user already said "remove and don't ask again" this session. */
 export async function trustedForSession(
@@ -484,7 +484,7 @@ export async function reviewKeepNothing(
   $: ReviewHost,
   sessionId: string,
   messages: readonly Message[],
-  config: Pick<ContextOsConfig, 'preserveRecentMessages'>,
+  config: Pick<LosslessCompactConfig, 'preserveRecentMessages'>,
   result: OptimizeResult,
   threshold: number,
   best: number,
@@ -501,7 +501,7 @@ export async function reviewKeepNothing(
       reviewer = `the session's model (${forked.usage.input_tokens + forked.usage.output_tokens} tokens)`;
     }
   } catch (error) {
-    $.ui.log(`context-os review: fork unavailable (${error instanceof Error ? error.message : String(error)})`);
+    $.ui.log(`lossless-compact review: fork unavailable (${error instanceof Error ? error.message : String(error)})`);
   }
   if (!verdict) {
     try {
@@ -513,7 +513,7 @@ export async function reviewKeepNothing(
       verdict = parseReview(text, ids);
       reviewer = 'haiku (user turns only)';
     } catch (error) {
-      $.ui.log(`context-os review: completion unavailable (${error instanceof Error ? error.message : String(error)})`);
+      $.ui.log(`lossless-compact review: completion unavailable (${error instanceof Error ? error.message : String(error)})`);
     }
   }
   if (verdict?.verdict === 'drop_all') {
@@ -525,8 +525,8 @@ export async function reviewKeepNothing(
   const doubt = verdict ? `${reviewer} could not confirm that is right${verdict.reason ? ` (${verdict.reason})` : ''}` : 'no model could review it';
   try {
     const answer = await $.ui.ask(
-      `context-os: ${facts}, and ${doubt}. Every removed result stays in the archive and can be restored by id. Remove them, or use Claude's summary instead?`,
-      { header: 'context-os', options: [REVIEW_ANSWERS.remove, REVIEW_ANSWERS.trust, REVIEW_ANSWERS.summary] },
+      `lossless-compact: ${facts}, and ${doubt}. Every removed result stays in the archive and can be restored by id. Remove them, or use Claude's summary instead?`,
+      { header: 'lossless-compact', options: [REVIEW_ANSWERS.remove, REVIEW_ANSWERS.trust, REVIEW_ANSWERS.summary] },
     );
     if (answer === REVIEW_ANSWERS.trust) {
       try {
@@ -552,7 +552,7 @@ export interface LastCompaction {
 }
 
 function lastKey(sessionId: string): string {
-  return `context-os:last:${sessionId}`;
+  return `lossless-compact:last:${sessionId}`;
 }
 
 function formatTokens(n: number): string {
@@ -571,7 +571,7 @@ export async function statusText(
   const stats = await archive.stats(sessionId);
   const constraints = findConstraints(messages, ledger);
   const lines = [
-    `context-os — session ${sessionId}`,
+    `lossless-compact — session ${sessionId}`,
     `Active context:        ~${formatTokens(active)} tokens (est.), ${messages.length} messages, ${ledger.interactions.size} tool interactions`,
     `Archived this session: ~${formatTokens(stats.tokens)} tokens in ${stats.records} records`,
     `Classifier:            ${last?.report.classifier ?? classifier}${last ? '' : ' (configured)'}`,
@@ -734,7 +734,7 @@ function percent(ratio: number): string {
 }
 
 export const register: Register = (on: On, options: PluginOptions) => {
-  const configured = resolveContextOsConfig(options);
+  const configured = resolveLosslessCompactConfig(options);
   let compacting = false;
   let classifierName: string = configured.classifier;
 
@@ -745,7 +745,7 @@ export const register: Register = (on: On, options: PluginOptions) => {
       classifierName = resolvedClassifierName(configured, await getApiKey($, configured));
     } catch (error) {
       try {
-        $.ui.log(`context-os: could not resolve the configured classifier (${error instanceof Error ? error.message : String(error)})`);
+        $.ui.log(`lossless-compact: could not resolve the configured classifier (${error instanceof Error ? error.message : String(error)})`);
       } catch {
         // The compaction path will retry and fail less if this was transient.
       }
@@ -753,14 +753,14 @@ export const register: Register = (on: On, options: PluginOptions) => {
     try {
       await $.command.register({
         name: 'context',
-        description: 'Context usage, plus what context-os archived: inspect, explain, restore',
+        description: 'Context usage, plus what lossless-compact archived: inspect, explain, restore',
         argumentHint: '[list|why <id>|show <id>|restore <id>|retrieve <query>]',
       });
     } catch (error) {
       try {
         // Claude Code refuses the built-in name; the command.run hook below
         // still intercepts it (seen live on 2.1.278), so nothing is lost.
-        $.ui.log(`context-os: /context is the host's own here; subcommands run through the command.run hook (${error instanceof Error ? error.message : String(error)})`);
+        $.ui.log(`lossless-compact: /context is the host's own here; subcommands run through the command.run hook (${error instanceof Error ? error.message : String(error)})`);
       } catch {
         // ignore
       }
@@ -772,12 +772,12 @@ export const register: Register = (on: On, options: PluginOptions) => {
     // Interactive Claude Code owns bare `/context` as a native modal. Its
     // command result is not a text surface, so appended hook text only appeared
     // in headless tests. Preserve the modal and use a toast as visible proof
-    // that context-os is active; `/context status` prints the full report.
+    // that lossless-compact is active; `/context status` prints the full report.
     if (event.args.trim().length === 0) {
       try {
         const builtin = await next(event);
         try {
-          $.ui.toast(`context-os active · classifier ${classifierName}; /context status for archive details`, {
+          $.ui.toast(`lossless-compact active · classifier ${classifierName}; /context status for archive details`, {
             timeoutMs: 10_000,
           });
         } catch {
@@ -829,7 +829,7 @@ export const register: Register = (on: On, options: PluginOptions) => {
       const calibration = suspectCalibration(optimized.result.actions, optimized.result.report.classified);
       if (calibration.suspect && !(await trustedForSession($, sessionId))) {
         const review = await reviewKeepNothing($, sessionId, event.messages, configured, optimized.result, threshold, calibration.best);
-        $.ui.log(`context-os: ${review.why}`);
+        $.ui.log(`lossless-compact: ${review.why}`);
         if (review.decision === 'keep') {
           const reviewed = classifierWithKeeps(optimized.result.decisions, new Set(review.keep), `${classifier.name}+review`);
           optimized = await optimizeSession(event.messages, configured, reviewed, archive, sessionId);
@@ -851,7 +851,7 @@ export const register: Register = (on: On, options: PluginOptions) => {
             const [manifest] = await writeSnapshot(engineFs($), root, sessionId, result.report.compactionId, event.messages, at);
             snapshotPath = manifest ? absolute(manifest) : undefined;
           } catch (error) {
-            $.ui.log(`context-os snapshot skipped (${error instanceof Error ? error.message : String(error)})`);
+            $.ui.log(`lossless-compact snapshot skipped (${error instanceof Error ? error.message : String(error)})`);
           }
         }
         if (configured.noteRemoved) {
@@ -887,7 +887,7 @@ export const register: Register = (on: On, options: PluginOptions) => {
       if (distrust) return fallback(distrust);
       safeNotify(
         $,
-        `context-os kept ${messages.length}/${event.messages.length} messages, archived ${result.archived.length} units, no summary (${summary})${
+        `lossless-compact kept ${messages.length}/${event.messages.length} messages, archived ${result.archived.length} units, no summary (${summary})${
           calibration.suspect ? ' — reviewed, see the log' : ''
         }`,
       );
@@ -909,7 +909,7 @@ export const register: Register = (on: On, options: PluginOptions) => {
       if (found.blocks.length === 0) return next(event);
       try {
         $.ui.log(
-          `context-os retrieved ${found.records.map((r) => r.id).join(', ')} (~${found.chars} chars) for this prompt`,
+          `lossless-compact retrieved ${found.records.map((r) => r.id).join(', ')} (~${found.chars} chars) for this prompt`,
         );
       } catch {
         // ignore
@@ -917,7 +917,7 @@ export const register: Register = (on: On, options: PluginOptions) => {
       return next({ ...event, context: [...(event.context ?? []), REHYDRATION_PREFACE, ...found.blocks] });
     } catch (error) {
       try {
-        $.ui.log(`context-os retrieval skipped (${error instanceof Error ? error.message : String(error)})`);
+        $.ui.log(`lossless-compact retrieval skipped (${error instanceof Error ? error.message : String(error)})`);
       } catch {
         // ignore
       }

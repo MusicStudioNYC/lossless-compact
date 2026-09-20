@@ -15,7 +15,7 @@
 <text x="540" y="86" class="head">recoverable</text>
 <text x="706" y="72" class="head">Droppable content</text>
 <text x="706" y="86" class="head">removed (judge)</text>
-<text x="16" y="117" class="row">context-os + Jev</text><text x="16" y="131" class="rowsub">archives, keepThreshold 0.35</text>
+<text x="16" y="117" class="row">lossless-compact + Jev</text><text x="16" y="131" class="rowsub">archives, keepThreshold 0.35</text>
 <rect x="208" y="106" width="108" height="14" fill="#1c2128"/>
 <path d="M208 106h95a4 4 0 0 1 4 4v6a4 4 0 0 1 -4 4h-95z" fill="#3987e5"/>
 <text x="324" y="117" class="val">91%</text>
@@ -28,7 +28,7 @@
 <rect x="706" y="106" width="108" height="14" fill="#1c2128"/>
 <path d="M706 106h99a4 4 0 0 1 4 4v6a4 4 0 0 1 -4 4h-99z" fill="#3987e5"/>
 <text x="822" y="117" class="val">95%</text>
-<text x="16" y="153" class="row">context-os, heuristic</text><text x="16" y="167" class="rowsub">archives, no key, no network</text>
+<text x="16" y="153" class="row">lossless-compact, local ruleset</text><text x="16" y="167" class="rowsub">no model, no key, no network</text>
 <rect x="208" y="142" width="108" height="14" fill="#1c2128"/>
 <path d="M208 142h96a4 4 0 0 1 4 4v6a4 4 0 0 1 -4 4h-96z" fill="#3987e5"/>
 <text x="324" y="153" class="val">93%</text>
@@ -67,5 +67,5 @@
 <rect x="706" y="214" width="108" height="14" fill="#1c2128"/>
 <path d="M706 214h76a4 4 0 0 1 4 4v6a4 4 0 0 1 -4 4h-76z" fill="#5a5a57"/>
 <text x="822" y="225" class="val">74%</text>
-<rect x="16" y="257" width="10" height="10" rx="2" fill="#3987e5"/><text x="31" y="266" class="key">context-os</text><rect x="108" y="257" width="10" height="10" rx="2" fill="#5a5a57"/><text x="123" y="266" class="key">others</text>
+<rect x="16" y="257" width="10" height="10" rx="2" fill="#3987e5"/><text x="31" y="266" class="key">lossless-compact</text><rect x="108" y="257" width="10" height="10" rx="2" fill="#5a5a57"/><text x="123" y="266" class="key">others</text>
 </svg>

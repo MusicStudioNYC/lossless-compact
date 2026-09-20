@@ -10,7 +10,7 @@ import {
   withCompactionNote,
   withCompactionNoteSession,
   writeSnapshot,
-} from '../hooks/context-os.js';
+} from '../hooks/lossless-compact.js';
 
 function fakeFs(): TextFs & { files: Map<string, string> } {
   const files = new Map<string, string>();
@@ -75,8 +75,8 @@ const report: OptimizeReport = {
 describe('writeSnapshot', () => {
   it('writes the exact transcript without engine handles as one JSON file', async () => {
     const fs = fakeFs();
-    const paths = await writeSnapshot(fs, '.context-os', 's1', 'c_1', session, '2026-09-20T00:00:00.000Z');
-    expect(paths).toEqual(['.context-os/snapshots/s1/c_1.json']);
+    const paths = await writeSnapshot(fs, '.lossless-compact', 's1', 'c_1', session, '2026-09-20T00:00:00.000Z');
+    expect(paths).toEqual(['.lossless-compact/snapshots/s1/c_1.json']);
     const parsed = JSON.parse(fs.files.get(paths[0]!)!);
     expect(parsed.messages).toHaveLength(3);
     expect(parsed.messages[0]).toEqual({ role: 'user', text: 'Fix the test. Never edit src/generated.', toolUses: [] });
@@ -92,8 +92,8 @@ describe('writeSnapshot', () => {
       toolUses: [],
       handle: `h${i}`,
     }));
-    const paths = await writeSnapshot(fs, '.context-os', 's1', 'c_2', big, '2026-09-20T00:00:00.000Z');
-    expect(paths[0]).toBe('.context-os/snapshots/s1/c_2.json');
+    const paths = await writeSnapshot(fs, '.lossless-compact', 's1', 'c_2', big, '2026-09-20T00:00:00.000Z');
+    expect(paths[0]).toBe('.lossless-compact/snapshots/s1/c_2.json');
     expect(paths.length).toBeGreaterThan(2);
     for (const path of paths) expect(fs.files.get(path)!.length).toBeLessThanOrEqual(3.6 * 1024 * 1024);
     const manifest = JSON.parse(fs.files.get(paths[0]!)!);
@@ -121,13 +121,13 @@ describe('compactionNote / withCompactionNote', () => {
       at: '2026-09-20T00:00:00.000Z',
       compactionId: 'c_1',
       report,
-      snapshotPath: 'C:/proj/.context-os/snapshots/s1/c_1.json',
-      archiveDir: 'C:/proj/.context-os',
+      snapshotPath: 'C:/proj/.lossless-compact/snapshots/s1/c_1.json',
+      archiveDir: 'C:/proj/.lossless-compact',
       rawLogPath: 'C:/Users/me/.claude/projects/c--proj/s1.jsonl',
     });
     expect(note).toContain('4 tool interactions (~60 tokens) were removed');
-    expect(note).toContain('C:/proj/.context-os/snapshots/s1/c_1.json');
-    expect(note).toContain('C:/proj/.context-os/archive/');
+    expect(note).toContain('C:/proj/.lossless-compact/snapshots/s1/c_1.json');
+    expect(note).toContain('C:/proj/.lossless-compact/archive/');
     expect(note).toContain('C:/Users/me/.claude/projects/c--proj/s1.jsonl');
     expect(note).toContain('/context restore <id>');
     expect(note).not.toMatch(/summar(y|ized) of/);
@@ -150,14 +150,14 @@ describe('compactionNote / withCompactionNote', () => {
       at: '2026-09-20T00:00:00.000Z',
       compactionId: 'c_1',
       report,
-      snapshotPath: 'C:/proj/.context-os/snapshots/s1/c_1.json',
-      archiveDir: 'C:/proj/.context-os',
+      snapshotPath: 'C:/proj/.lossless-compact/snapshots/s1/c_1.json',
+      archiveDir: 'C:/proj/.lossless-compact',
       summarized: true,
     });
     expect(note).toMatch(/built-in summary; the message above is a paraphrase/);
     expect(note).toContain('archived 4 tool interactions (~60 tokens) verbatim and saved the exact pre-compaction transcript');
-    expect(note).toContain('C:/proj/.context-os/snapshots/s1/c_1.json');
-    expect(note).toContain('C:/proj/.context-os/archive/');
+    expect(note).toContain('C:/proj/.lossless-compact/snapshots/s1/c_1.json');
+    expect(note).toContain('C:/proj/.lossless-compact/archive/');
     expect(note).not.toContain('Nothing was summarized');
     // No stubs survive a summary, so it must not tell the model to look for one.
     expect(note).not.toContain('a stub in this transcript');
@@ -213,7 +213,7 @@ describe('suspectCalibration (upstream #53)', () => {
 
 describe('shouldCompact', () => {
   it('triggers on an absolute token count, deriving it from percent and window when needed', async () => {
-    const { shouldCompact } = await import('../hooks/context-os.js');
+    const { shouldCompact } = await import('../hooks/lossless-compact.js');
     const config = { compactAtTokens: 120_000, compactAtPercent: 0 };
     expect(shouldCompact({ tokens: 119_999, percent: 60 }, config)).toBe(false);
     expect(shouldCompact({ tokens: 120_000, percent: 10 }, config)).toBe(true);

@@ -270,7 +270,7 @@ describe('optimize: main scenario', () => {
     const archiveId = decision.archiveIds![0]!;
     const toolResult = findToolResult(result.messages, 'c4')!;
     expect(toolResult.text.startsWith(bashFailLong.slice(0, 40))).toBe(true);
-    expect(toolResult.text).toContain(`context-os archived ${archiveId}`);
+    expect(toolResult.text).toContain(`lossless-compact archived ${archiveId}`);
     const toolUse = findToolUse(result.messages, 'c4')!;
     expect(toolUse.text).toBe(toolResult.text);
   });
@@ -281,7 +281,7 @@ describe('optimize: main scenario', () => {
     const narrated = result.messages.find((m) => m.text.startsWith('Editing b.ts to fix the off-by-one.'));
     expect(narrated).toBeDefined();
     expect(narrated!.text.startsWith('Editing b.ts to fix the off-by-one.')).toBe(true);
-    expect(narrated!.text).toContain('[context-os archived 1 tool call made here: Edit file_path=src/b.ts → ');
+    expect(narrated!.text).toContain('[lossless-compact archived 1 tool call made here: Edit file_path=src/b.ts → ');
     // the call itself is gone from the rebuilt message
     expect(narrated!.toolUses.some((u) => u.tool_use_id === 'c6')).toBe(false);
   });
@@ -322,13 +322,13 @@ describe('optimize: main scenario', () => {
     const mergedMarker = out.messages[1]!;
     expect(mergedMarker.role).toBe('assistant');
     expect(mergedMarker.toolUses).toEqual([]);
-    expect(mergedMarker.text.startsWith('[context-os archived 3 tool calls made here: Read file_path=types/api.d.ts → ')).toBe(true);
+    expect(mergedMarker.text.startsWith('[lossless-compact archived 3 tool calls made here: Read file_path=types/api.d.ts → ')).toBe(true);
     expect(mergedMarker.text).toContain('; Read file_path=types/api.d.ts offset=2001 → ');
     expect(mergedMarker.text).toContain('; Read file_path=types/api.d.ts offset=4001 → ');
     const ids = out.actions.slice(0, 3).map((a) => a.archiveIds![0]);
     for (const id of ids) expect(mergedMarker.text).toContain(id!);
     expect(texts[2]).toBe('Chunks read.');
-    expect(texts[3]!.startsWith('[context-os archived 1 tool call made here: Read file_path=docs/notes.md → e_')).toBe(true);
+    expect(texts[3]!.startsWith('[lossless-compact archived 1 tool call made here: Read file_path=docs/notes.md → e_')).toBe(true);
     expect(texts.slice(4)).toEqual(['The answer is 42.', 'thanks']);
     // and nothing of the sort without the option
     const { result: bare } = await run(messages, { classifier: dropAll, preserveRecentMessages: 2, markRemovedCalls: false });

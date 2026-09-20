@@ -1,10 +1,12 @@
-# context-os
+# lossless-compact
 
-A context optimizer for coding agents. Instead of summarizing old turns, it
-keeps the smallest sufficient working set **verbatim**, moves everything it
-removes into an exact, searchable **archive**, and can bring any of it back
-by id. Every decision is explainable (`/context why <id>`), nothing is
-paraphrased, and a wrong call is recoverable rather than fatal.
+Lossless compaction for coding agents, shipped today as a Claude Code plugin.
+Instead of summarizing old turns, it keeps the smallest sufficient working set
+**verbatim**, moves everything it removes into an exact, searchable
+**archive**, and can bring any of it back by id — so compaction frees the
+context window without losing anything. Every decision is explainable
+(`/context why <id>`), nothing is paraphrased, and a wrong call is
+recoverable rather than fatal.
 
 It ships as a Claude Code plugin (function hooks, 2.1.274+) and as an npm
 library, and is a fork of
@@ -19,10 +21,10 @@ transcript ──► ledger (stable event ids)
            ├─ protect  unresolved errors · results later quoted / referenced by the user
            │           · results of non-reproducible tools · files being edited right now
            ├─ dedupe   identical tool+input+result seen again later
-           ├─ classify Jev (TypeSafe) or a local heuristic, over a redacted, sketched state
+           ├─ classify Jev (TypeSafe) or a local ruleset (no model), over a redacted, sketched state
            ├─ decide   PIN_VERBATIM · KEEP_VERBATIM · KEEP_HEAD_TAIL · RERUN_ON_DEMAND
            │           · ARCHIVE_ONLY · DROP_REDUNDANT — each with reasons
-           ├─ archive  every evicted unit, exact, under .context-os/ with provenance
+           ├─ archive  every evicted unit, exact, under .lossless-compact/ with provenance
            └─ rebuild  stubs name the archive id; removed calls leave a marker
 ```
 
@@ -35,7 +37,7 @@ result structure is always preserved. If the classifier fails or is unsure,
 content stays.
 
 Before compacting, the exact transcript is written to
-`.context-os/snapshots/<session>/<compaction>.json`, and one note is inserted
+`.lossless-compact/snapshots/<session>/<compaction>.json`, and one note is inserted
 after the first message telling the model what was removed and where the
 snapshot, the archive and the raw Claude Code session log
 (`~/.claude/projects/…/<session>.jsonl`, which compaction never modifies) are,
@@ -45,7 +47,7 @@ so it can grep or read any removed message itself.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/compare-dark.svg">
-  <img alt="What survives a compaction: context-os with Jev removes 91% of tokens, keeps 6 of 6 must-keep results verbatim, keeps all 27 probes recoverable and removes 95% of droppable content; the heuristic 93%, 3 of 6, 27 of 27, 84%; Claude Code's /compact summary 90%, 0 of 6, 14 of 27, 71%; upstream fast-jev 97%, 2 of 6, 3 of 27, 74%." src="docs/img/compare.svg" width="880">
+  <img alt="What survives a compaction: lossless-compact with Jev removes 91% of tokens, keeps 6 of 6 must-keep results verbatim, keeps all 27 probes recoverable and removes 95% of droppable content; the local ruleset 93%, 3 of 6, 27 of 27, 84%; Claude Code's /compact summary 90%, 0 of 6, 14 of 27, 71%; upstream fast-jev 97%, 2 of 6, 3 of 27, 74%." src="docs/img/compare.svg" width="880">
 </picture>
 
 Eight adversarial scenarios, 332k tokens in all — a port that only ever
@@ -58,39 +60,42 @@ last is a Sonnet judge reading the compacted context (the only fair way to
 score a summary, and ~6 % noisy). Method and full tables:
 [docs/evals.md](docs/evals.md).
 
-- **Same reduction, nothing lost.** `/compact` and context-os both cut the
+- **Same reduction, nothing lost.** `/compact` and lossless-compact both cut the
   context by ~90 %. The summary keeps none of the six must-keeps verbatim and
-  loses 13 of 27 probes for good; context-os keeps all six as the original
+  loses 13 of 27 probes for good; lossless-compact keeps all six as the original
   bytes and can bring any of the 27 back by id. Asked more loosely, the judge
   finds all six must-keeps *mentioned* in the summary, paraphrased — a
   summary's port number or id is as reliable as the summarizer.
 - **Less junk carried.** 29 % of the content labelled droppable is still in
   the summary; 5 % in ours, which is the judge's noise floor.
-- **Every summary rewrote everything** (8/8). context-os never rewrites a
+- **Every summary rewrote everything** (8/8). lossless-compact never rewrites a
   byte: a compacted transcript is still greppable, diffable and quotable.
-- **The heuristic is the no-key fallback.** Same reduction, no network; it
+- **The local ruleset is the no-key fallback.** A hand-written, deterministic
+  set of rules — which tools are cheap to re-run, what reads like an error,
+  how old a result is — with no model and no network. It is called
+  `heuristic` in settings and in `/context status`. Same reduction; it
   misses three of the six needles that nothing later refers to — the semantic
   call Jev is for — but archives them, so `/context restore` or prompt
   retrieval brings them back.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/latency-dark.svg">
-  <img alt="Time per compaction on a log scale: context-os with Jev 528 ms, the heuristic 40 ms, Claude Code's /compact summary 82 s, upstream fast-jev 305 ms." src="docs/img/latency.svg" width="880">
+  <img alt="Time per compaction on a log scale: lossless-compact with Jev 528 ms, the local ruleset 40 ms, Claude Code's /compact summary 82 s, upstream fast-jev 305 ms." src="docs/img/latency.svg" width="880">
 </picture>
 
 A summary is one full-context model call: 82 s per compaction on these
 ≤ 70k-token cases (50–112 s), and 93–135 s on a real 255–294k-token session.
-context-os + Jev took ~0.5 s here including the Jev round trips (the engine
+lossless-compact + Jev took ~0.5 s here including the Jev round trips (the engine
 itself is ~47 ms) and 819 ms end-to-end on that same real session
-(258k → 49k tokens); the heuristic, 40 ms. Jev bills a few small requests per
+(258k → 49k tokens); the local ruleset, 40 ms. Jev bills a few small requests per
 compaction — under a cent. On real Claude Code sessions of 100k–330k tokens
-context-os removes ~49 % with Jev and ~46 % with the heuristic; how a
+lossless-compact removes ~49 % with Jev and ~46 % with the local ruleset; how a
 summary's recall holds up past 200k tokens is the open question, answered
 once a few of those sessions are labelled.
 
 ### The upstream project
 
-context-os is a fork of
+lossless-compact is a fork of
 [tamaratran/fast-jev-compaction](https://github.com/tamaratran/fast-jev-compaction),
 and the idea it stands on is theirs: instead of asking a frontier model to
 rewrite the conversation, ask [Jev](https://typesafe.ai), a small, fast
@@ -111,7 +116,7 @@ Needs Claude Code 2.1.274 or newer (`claude --version`); function hooks did
 not exist before that.
 
 1. Turn on function hooks, and give the plugin a Jev key if you have one
-   (leave `TYPESAFE_API_KEY` out to run the local heuristic classifier — no
+   (leave `TYPESAFE_API_KEY` out to run the local ruleset — no model, no
    network, no key, still verbatim and reversible):
 
    ```json
@@ -122,14 +127,14 @@ not exist before that.
 2. Install at user scope, so every project gets it:
 
    ```sh
-   claude plugin marketplace add MusicStudioNYC/context-os
-   claude plugin install context-os@context-os
+   claude plugin marketplace add MusicStudioNYC/lossless-compact
+   claude plugin install lossless-compact@lossless-compact
    ```
 
 3. Start a new session and type `/context status`. The text report should
-   start with `context-os` and name `jev` (with a key) or `heuristic` (without
+   start with `lossless-compact` and name `jev` (with a key) or `heuristic` (without
    one). A bare `/context` remains Claude Code's native usage grid and shows a
-   short `context-os active` toast; the host does not let plugins add rows to
+   short `lossless-compact active` toast; the host does not let plugins add rows to
    that modal.
 
    A session that was already open before step 2 does not have the plugin, and
@@ -137,7 +142,7 @@ not exist before that.
    reports `hooks modules unchanged`). In the VS Code extension every chat tab
    is its own `claude` process, so open a new chat (or resume the old session
    in one). In a tab without the plugin, `/compact` is Claude Code's own
-   summary — a minute or more on a large context, with no `context-os` toast.
+   summary — a minute or more on a large context, with no `lossless-compact` toast.
 
 Or from a checkout, for one session: `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir .`
 
@@ -148,10 +153,10 @@ trigger, off by default), and every compaction — yours, Claude Code's own
 near the limit, or the plugin's — goes through the same hook, so none of
 them summarize. `/context status` shows the plugin's usage and archive state.
 
-Without a `TYPESAFE_API_KEY` the plugin runs the local heuristic classifier —
-no network, ~200 ms on a 300k-token transcript. With a key (env var, settings
+Without a `TYPESAFE_API_KEY` the plugin runs the local ruleset (`heuristic`) —
+no model, no network, ~200 ms on a 300k-token transcript. With a key (env var, settings
 `env`, or the plugin's `apiKey` option) it uses Jev. `/compact` and
-auto-compaction both go through it; the compaction toast reads `context-os kept N/M
+auto-compaction both go through it; the compaction toast reads `lossless-compact kept N/M
 messages, archived K units, no summary (…)`, or `fallback to built-in summary
 (…)` when it could not remove enough or something failed — in that case the
 note still goes into the summarized transcript, since the archive and the
@@ -175,7 +180,7 @@ near-limit compaction still run through the hook there.
 ### `/context`
 
 ```
-/context                    Claude Code's own usage grid, plus a context-os active/classifier toast
+/context                    Claude Code's own usage grid, plus a lossless-compact active/classifier toast
 /context status             active tokens, archived tokens, constraints found, classifier, last compaction
 /context list [n]           newest archived records
 /context why <id>           the action and every reason behind it
@@ -185,7 +190,7 @@ near-limit compaction still run through the hook there.
 ```
 
 Archive ids appear in the stubs the model sees, e.g.
-`[context-os archived e_3f9a…: 8421 more chars of this Read result (file_path=src/a.ts); /context restore e_3f9a… brings it back verbatim, or re-run the tool]`.
+`[lossless-compact archived e_3f9a…: 8421 more chars of this Read result (file_path=src/a.ts); /context restore e_3f9a… brings it back verbatim, or re-run the tool]`.
 
 ### Plugin options
 
@@ -199,8 +204,8 @@ Archive ids appear in the stubs the model sees, e.g.
 | `sketches` | true | Show the classifier a tool-aware sketch of each result |
 | `redact` | true | Replace keys, tokens and passwords before anything is sent to a classifier |
 | `markRemovedCalls` | true | Marker in a message whose tool calls were archived |
-| `archiveDir` | `.context-os` | Where the archive and snapshots live, relative to the project |
-| `snapshot` | true | Write the exact pre-compaction transcript to `.context-os/snapshots/` |
+| `archiveDir` | `.lossless-compact` | Where the archive and snapshots live, relative to the project |
+| `snapshot` | true | Write the exact pre-compaction transcript to `.lossless-compact/snapshots/` |
 | `noteRemoved` | true | Insert one message into the compacted transcript saying what was removed and where the snapshot, archive and raw session log are |
 | `autoRetrieve` / `retrieveBudgetChars` | true / 6000 | Search the archive before each prompt and hand the model the best exact matches |
 | `compactAtTokens` | 120000 | Live context size that triggers auto-compaction (0 = off) |
@@ -210,7 +215,7 @@ Archive ids appear in the stubs the model sees, e.g.
 | `maxStateTokens` / `maxRequestTokens` | 25000 / 30000 | Jev state and request budgets |
 | `model` / `apiKey` | `jev-latest` / env | TypeSafe model and key |
 
-Add `.context-os/` to the project's `.gitignore`.
+Add `.lossless-compact/` to the project's `.gitignore`.
 
 ## Library
 
@@ -220,7 +225,7 @@ import { nodeFs } from 'fast-jev-compaction/dist/node/fs.js';
 
 const result = await optimize(messages, {
   sessionId: 'abc',
-  archive: new FileArchive(nodeFs, { root: '.context-os' }),
+  archive: new FileArchive(nodeFs, { root: '.lossless-compact' }),
   classifier: process.env.TYPESAFE_API_KEY
     ? new JevClassifier(new JevClient())
     : new HeuristicClassifier(),
