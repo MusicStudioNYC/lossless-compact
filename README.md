@@ -9,7 +9,7 @@ context window without losing anything. Every decision is explainable
 recoverable rather than fatal.
 
 It ships as a Claude Code plugin (function hooks, 2.1.274+) and as an npm
-library, and is a fork of
+library, and was inspired by
 [tamaratran/fast-jev-compaction](https://github.com/tamaratran/fast-jev-compaction)
 (MIT) — see [UPSTREAM.md](UPSTREAM.md) for what was kept, fixed and diverged.
 
