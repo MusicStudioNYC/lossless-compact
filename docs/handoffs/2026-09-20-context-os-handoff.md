@@ -37,7 +37,7 @@
 
 1. **Live smoke test in Claude Code.** The `claude` CLI on PATH is 2.1.238 (function hooks need 2.1.274+; `validate:plugin` fails on it) but the VS Code extension runs 2.1.278 — this very session's transcript says so. Run `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir .` with a ≥ 2.1.274 binary, drive a long session, `/compact`, `/context`, check `.context-os/` is written, check `prompt.submit` retrieval appears in the model's context. Unverified assumptions to confirm: `$.fs.list` entry shape (`{name}`), `$.command.register` from `session.start`, `event.text` on `prompt.submit`, the 10 s hook budget on a 300k-token transcript.
 2. **Label ~5 real sessions, model-assisted** (owner chose this): a subagent reads `datasets/real/<case>/transcript.json`, writes `labels.json` (must_keep / nice_to_keep / safe_to_truncate / safe_to_drop per `tool_use_id`, plus probes), the owner spot-checks; then `npm run eval -- --dataset datasets/real --modes OURS_JEV,OURS_HEURISTIC,UPSTREAM_FAST_JEV` gives the first real false-drop rate (Jev cassettes for the 12 real cases already exist). Re-check the 0.35 default against those labels.
-3. **Per-project settings** (option B above, ~80 lines in the hook + tests) if the owner confirms.
+3. **Per-project settings** (option B above, ~80 lines in the hook + tests) — owner confirmed B.
 4. **Windowed classification** (upstream #52): when `fitState` reaches the `old messages collapsed` stage or worse, Jev is asked about calls it cannot see. Score in windows (build the state per batch with that batch's messages in full). `JevClassifier.score` is the place.
 5. **Phase 3 durable memory**: `EXTRACT_MEMORY_AND_ARCHIVE` exists in the taxonomy but nothing produces memories yet. Plan §13: categories, provenance (`source_ids` = event ids), `active/superseded/disputed`. Extraction channel: `$.model.fork({prompt})` in the hook (cheap, shares the prompt cache) or `$.model.complete`; store under `.context-os/memory/` via `FileArchive`-style sharding; surface via `prompt.section` (cached) or `prompt.submit` context. `findConstraints` already yields USER_CONSTRAINT candidates.
 6. **Retrieval quality**: today lexical only (`rankRecords`). Add embeddings (plan §14) and expand the query with recent active context (current files, errors). Add a retrieval column to the eval report (the check now lives only in docs/evals.md prose).
@@ -70,7 +70,8 @@
 - Next step: "Live smoke test in Claude Code 2.1.278".
 - Mid-chat: "can it make a backup of the jsonl file and then … inject something like 'Full un-compacted jsonl file can be found here…' into the newly compacted context" → done (snapshot + note, above).
 - Mid-chat: "compact at a fixed value, not percent … you tell me what's a reasonable number" → `compactAtTokens` default 120 000 (reasoning in README / chat).
-- Mid-chat: "what's the smartest way to make settings available to everyone … GUI if simple" → options A–D laid out; recommended A + B (see above).
+- Mid-chat: "what's the smartest way to make settings available to everyone … GUI if simple" → options A–D laid out; owner chose **B** (per-project `.context-os/config.json` + `/context set`).
+- End of chat: native-/compact eval left running to completion (owner's choice); its report lands in `reports/<newest>/report.md`.
 - Mid-chat: "did you make tests while knowing the ground truth … compare with a traditional /compact … how much it removed that it should not have, and how much it didn't remove that it should have?" → yes for the first (labels + probes; both error directions now in the report), and the native comparison + judge were built in response.
 
 ## Traps (deliberate things that look wrong)
