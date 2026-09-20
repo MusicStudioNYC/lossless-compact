@@ -18,7 +18,9 @@ handoff's "what is left" list when it is picked up; delete it when done.
 | 2026-09-20 | Decide npm package name (`fast-jev-compaction` → `context-os`?) and the GitHub remote for `origin` | Owner decision |
 | 2026-09-20 | Dedupe rehydration across turns (the same record re-injected every prompt that mentions it) | Per-turn cost; needs a `$.store` note of recently injected ids |
 | 2026-09-20 | Interactive check of the `turn.complete` auto-compaction trigger (needs a VS Code session past 120k tokens); `$.session.compact()` is unavailable headless | Only the headless path was exercised in the smoke test |
-| 2026-09-20 | Decide the upstream #53 keep-nothing guard: keep (fallback + note), or trust a classifier whose scores are all far below the threshold | Owner decision; a score band cannot separate #53 from a genuinely disposable session |
 | 2026-09-20 | Retrieval column in `scripts/eval.ts` report (today `scripts/retrieval-check.ts` is separate) | Small; the check script exists and is cited in docs/evals.md |
 | 2026-09-20 | The compaction note becomes the session's `last-prompt` until the next real prompt (cosmetic in the session picker) | Would need an assistant-role note or a host change; not worth a role change yet |
 | 2026-09-20 | Strong-reference rule missed `ORCHARD_DB_PORT=61873` quoted in backticks by the assistant (protected: none in the smoke run; Jev kept it anyway) | Check `splitReferences` quote detection on short `KEY=value` spans |
+| 2026-09-20 | Interactive check of the keep-nothing review: `$.model.fork` verdict and the `$.ui.ask` dialog (headless: fork cold, ask rejects; haiku path verified live) | Needs a VS Code session with ≥ 5 disposable reads, then `/compact` |
+| 2026-09-20 | Hook token estimator (chars/4) runs ~1.7× under the host count on Read-heavy transcripts; consider `$.session.usage()` or a per-block overhead in the log lines | Cosmetic: the trigger uses the host count |
+| 2026-09-20 | Report the `rechain` finding upstream to Claude Code (hook-compacted transcript undone on `--resume` when kept messages keep their handle) | Needs the GitHub issue tracker / feedback channel |

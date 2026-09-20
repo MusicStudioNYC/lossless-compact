@@ -76,7 +76,19 @@ auto-compaction both go through it; the toast reads `context-os kept N/M
 messages, archived K units, no summary (…)`, or `fallback to built-in summary
 (…)` when it could not remove enough or something failed — in that case the
 note still goes into the summarized transcript, since the archive and the
-snapshot were written first. In a headless session (`claude -p`, the SDK)
+snapshot were written first.
+
+When the classifier keeps *none* of five or more results it scored — either
+a wrong threshold or a stretch of the session whose tool output really was
+disposable — the plugin does not guess: it asks a model that has read the
+conversation (the session's own model over its transcript, cache-shared; a
+small model with your turns quoted when that is cold) whether removing them
+all is right. "Yes" proceeds, "keep these" re-runs with those kept, and
+anything else asks you: remove them (archived, restorable), remove and don't
+ask again this session, or use Claude's summary. The log says what was
+found, who reviewed it and what was decided.
+
+In a headless session (`claude -p`, the SDK)
 the host does not let a plugin start a compaction between turns yet, so the
 `compactAtTokens` trigger logs and waits; `/compact` and the host's own
 near-limit compaction still run through the hook there.

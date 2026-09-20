@@ -178,6 +178,9 @@ that matched. After the fixes:
 | `/context` | intercepts the built-in command: host usage grid, then our status (classifier `jev`, last compaction, 38 records); `list`, `why`, `restore` answer in ~10 ms |
 | Prompt retrieval | "what fields does the FsEntry type have…" → `e_777f…` (the d.ts chunk holding the definition) in 126 ms, excerpt at lines 3716–3747; the model answered from it and said so |
 | `turn.complete` auto-trigger | fires and `shouldCompact` is true at 293k, but `$.session.compact()` is "not available in a headless (-p / SDK) session yet"; the hook logs and carries on. **Interactive verification still open.** |
+| Keep-nothing review | on a session of unreferenced reads (7 scored, best 0.09) `$.model.fork` had no warm transcript (headless), `$.model.complete` (haiku) answered in 1.4 s — "reference-only reads with no downstream dependencies" — and the compaction proceeded verbatim in 2.1 s; with a reviewer that says "unsure" and no one to ask, the built-in summary with the note |
+| `--resume` after a hook compaction | **undone** in 2.1.278 when kept messages carry their engine handle: the resume walks `parentUuid` links from the newest message into the pre-boundary log (the next `/compact` saw every archived read again, twice). Fixed by handing back handle-less messages (`rechain`): on a fresh session the second `/compact` saw only the 3 pinned + 6 new calls, 96.7k → 6.5k tokens |
+| Token estimator | the hook's chars/4 estimate runs ~1.7× under the host's count on Read-heavy transcripts (line-number prefixes, per-block overhead); `compactAtTokens` uses the host's count, so only the log lines are affected |
 
 Retrieval check (`npx tsx scripts/retrieval-check.ts --dataset datasets/v1`:
 compact with the heuristic, then ask the archive with each case's final
