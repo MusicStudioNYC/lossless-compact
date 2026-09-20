@@ -1,23 +1,85 @@
 # lossless-compact
 
-Lossless compaction for coding agents, shipped today as a Claude Code plugin.
-Instead of summarizing old turns, it keeps the smallest sufficient working set
-**verbatim**, moves everything it removes into an exact, searchable
-**archive**, and can bring any of it back by id — so compaction frees the
-context window without losing anything. Every decision is explainable
-(`/lossless why <id>`), nothing is paraphrased, and a wrong call is
-recoverable rather than fatal.
+## Compacts your coding agent's memory without making it forget anything.
 
-It ships as a Claude Code plugin (function hooks, 2.1.274+) and as an npm
-library, and was inspired by
-[tamaratran/fast-jev-compaction](https://github.com/tamaratran/fast-jev-compaction)
-(MIT) — see [UPSTREAM.md](UPSTREAM.md) for what was kept, fixed and diverged.
+Hi — this is **lossless-compact**, a plugin for Claude Code (and Cursor,
+through the same extension). Here's the one thing to know: when a long
+coding session gets too big for the model's context window, your agent has
+to clear some of it out to keep going. This plugin changes *how* that
+clearing happens, so nothing important quietly disappears.
+
+## The problem this fixes
+
+Right now, when Claude Code's context fills up, it runs `/compact`: it asks
+the model to write a summary of everything so far, throws away the original
+transcript, and carries on with just the summary. That sounds reasonable
+until you notice what it actually costs you:
+
+- **It rewrites your history in its own words.** The exact port number from
+  a `.env` file, the file path from ten tool calls ago, the precise wording
+  of an error — all of that gets paraphrased, or just quietly dropped.
+- **You won't know what got lost.** There's no list of what was kept vs.
+  dropped, and no way to check.
+- **There's no undo.** Once the original is gone, it's gone. If the summary
+  missed something, you find out later, when the agent contradicts itself or
+  re-does work it already did.
+- **It's slow.** A real `/compact` on a large session takes anywhere from
+  50 seconds to a couple of minutes, because it's a full model call over the
+  whole context.
+
+lossless-compact does the same job — freeing up space — completely
+differently: it keeps the exact bytes of everything that still matters, and
+moves everything else into a searchable archive instead of deleting it. If
+it archived something you needed, you get it back verbatim, on request, in
+milliseconds. Nothing is ever paraphrased.
+
+## See it side by side
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/compare-dark.svg">
+  <img alt="What survives a compaction: lossless-compact with Jev removes 91% of tokens, keeps 6 of 6 must-keep results verbatim, keeps all 27 probes recoverable and removes 95% of droppable content; the local ruleset 93%, 3 of 6, 27 of 27, 84%; Claude Code's /compact summary 90%, 0 of 6, 14 of 27, 71%; upstream fast-jev 97%, 2 of 6, 3 of 27, 74%." src="docs/img/compare.svg" width="880">
+</picture>
+
+Both approaches free up roughly the same amount of space (~90%). The
+difference is what's left afterward: Claude Code's built-in summary keeps
+**zero** of the six things every test case says must not be lost, and
+permanently loses 13 of the 27 exact details planted in the test transcripts.
+lossless-compact keeps all six, word for word, and can still find every one
+of the 27 details afterward — because instead of deleting them, it archived
+them. Full methodology and numbers: [docs/evals.md](docs/evals.md).
+
+## Get it running (2 minutes)
+
+The easiest way: open a chat in Claude Code or Cursor and paste this in —
+it'll run the setup itself and ask you anything it needs to know (like
+whether you have a Jev API key; you don't need one to get started):
+
+```
+Set up the lossless-compact plugin for me:
+1. Add "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" to ~/.claude/settings.json
+   (merge it in, don't overwrite the file).
+2. Ask me if I have a Jev / TypeSafe API key. If yes, add it to the same
+   settings.json as "TYPESAFE_API_KEY". If no, skip this — the plugin still
+   works fully without one, using a local no-model fallback.
+3. Run: claude plugin marketplace add MusicStudioNYC/lossless-compact
+4. Run: claude plugin install lossless-compact@lossless-compact
+5. Tell me to start a brand-new chat and type /lossless to confirm it's active.
+```
+
+Prefer to do it by hand instead? Same five steps, typed yourself, are in
+[Full install & configuration](#install-in-claude-code) below.
 
 Works with:
 
 - ✅ **Claude Code** — terminal CLI and the VS Code extension
 - ✅ **Cursor** — through the Claude Code extension for Cursor (same plugin, same install)
 - ⏳ **Codex** — coming soon; the engine is host-agnostic (see [docs/plan.md](docs/plan.md), "Codex second")
+
+---
+
+Everything below this line is the technical detail — how it decides what to
+keep, the full numbers, the library API, and how to configure it. You don't
+need any of it to use the plugin.
 
 ## What it does at compaction time
 
@@ -50,11 +112,6 @@ snapshot, the archive and the raw Claude Code session log
 so it can grep or read any removed message itself.
 
 ## How it compares
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/img/compare-dark.svg">
-  <img alt="What survives a compaction: lossless-compact with Jev removes 91% of tokens, keeps 6 of 6 must-keep results verbatim, keeps all 27 probes recoverable and removes 95% of droppable content; the local ruleset 93%, 3 of 6, 27 of 27, 84%; Claude Code's /compact summary 90%, 0 of 6, 14 of 27, 71%; upstream fast-jev 97%, 2 of 6, 3 of 27, 74%." src="docs/img/compare.svg" width="880">
-</picture>
 
 Eight adversarial scenarios, 332k tokens in all — a port that only ever
 appeared in a `cat .env.example` result, a constraint stated late, an
