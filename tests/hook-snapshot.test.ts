@@ -5,6 +5,7 @@ import type { OptimizeReport } from '../src/engine/optimize.js';
 import {
   compactionNote,
   rawSessionLogPath,
+  rechain,
   suspectCalibration,
   withCompactionNote,
   withCompactionNoteSession,
@@ -160,6 +161,20 @@ describe('compactionNote / withCompactionNote', () => {
     expect(note).not.toContain('Nothing was summarized');
     // No stubs survive a summary, so it must not tell the model to look for one.
     expect(note).not.toContain('a stub in this transcript');
+  });
+
+  it('rechain strips every engine handle and drops messages that are nothing without one', () => {
+    const messages = rechain([
+      { role: 'user', text: 'first', toolUses: [], handle: 'h1' },
+      { role: 'assistant', text: '', toolUses: [], handle: 'h2' }, // thinking only
+      { role: 'assistant', text: '', toolUses: [{ tool_use_id: 't1', tool: 'Read', input: {}, text: 'x' }], handle: 'h3' },
+      { role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: 't1', text: 'x', isError: false }], handle: 'h4' },
+      { role: 'user', text: 'NOTE', toolUses: [] },
+    ]);
+    expect(messages.map((m) => m.text)).toEqual(['first', '', '', 'NOTE']);
+    expect(messages.every((m) => !('handle' in m))).toBe(true);
+    expect(messages[1]!.toolUses[0]!.tool_use_id).toBe('t1');
+    expect(messages[2]!.toolResults![0]!.tool_use_id).toBe('t1');
   });
 
   it('withCompactionNoteSession inserts after the host summary, keeping the host messages as given', () => {

@@ -27,3 +27,4 @@ export * from './engine/rehydrate.js';
 
 // Node-only helpers (transcript loading, evals) are imported from
 // `fast-jev-compaction/node` paths directly, never re-exported here.
+export * from './engine/review.js';

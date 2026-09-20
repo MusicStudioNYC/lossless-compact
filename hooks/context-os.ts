@@ -11,6 +11,14 @@ import { buildLedger, eventTokens } from '../src/core/events.js';
 import { findConstraints } from '../src/core/rules.js';
 import { optimize, type OptimizeReport, type OptimizeResult } from '../src/engine/optimize.js';
 import { REHYDRATION_PREFACE, rehydrateForPrompt } from '../src/engine/rehydrate.js';
+import {
+  classifierWithKeeps,
+  parseReview,
+  reviewCandidates,
+  reviewQuestion,
+  reviewQuestionWithContext,
+  type ReviewVerdict,
+} from '../src/engine/review.js';
 import type { Message } from '../src/types.js';
 import {
   decisionLogLines,
@@ -361,6 +369,30 @@ export function withCompactionNote(messages: readonly Message[], note: string): 
   return [messages[0]!, noteMessage, ...messages.slice(1)];
 }
 
+/**
+ * The compacted transcript with every engine handle removed. A message handed
+ * back with its handle "stands as the engine has it" — its own record, with
+ * its original parent link — and on `--resume` Claude Code 2.1.278 rebuilds
+ * the conversation by walking those links from the newest message: the first
+ * kept message after an evicted one leads straight back into the pre-boundary
+ * log, and the whole compaction is undone (seen live: the second /compact of
+ * a resumed session saw every archived read again, twice). Handle-less
+ * messages are built afresh by the host and chained after the boundary. The
+ * price is the kept assistant messages' thinking blocks, which a summary loses
+ * too.
+ */
+export function rechain(messages: readonly SessionMessage[]): SessionMessage[] {
+  const out: SessionMessage[] = [];
+  for (const message of messages) {
+    const { handle: _handle, ...rest } = message;
+    // A thinking-only assistant message is nothing without its handle; the
+    // host would store it as "(no content)".
+    if (rest.text.trim().length === 0 && rest.toolUses.length === 0 && (rest.toolResults ?? []).length === 0) continue;
+    out.push(rest);
+  }
+  return out;
+}
+
 /** The same insertion over the host's own compacted transcript (its summary comes first). */
 export function withCompactionNoteSession(messages: readonly SessionMessage[], note: string): SessionMessage[] {
   const noteMessage: SessionMessage = { role: 'user', text: note, toolUses: [] };
@@ -369,14 +401,14 @@ export function withCompactionNoteSession(messages: readonly SessionMessage[], n
 }
 
 /**
- * Upstream #53: a classifier that keeps none of the results it scored is more
- * often miscalibrated than right (that issue: everything under 0.3 with a 0.5
- * threshold, on 16 real sessions), so the transcript goes to the built-in
- * summary instead — with the note, since the archive and snapshot are already
- * on disk. Fewer than five scored results is too few to judge. The best
- * result score comes back so the log can say how far off it was; a session
- * whose tool output really was all disposable (a smoke test that only reads
- * files) trips this too, and the note is what makes that cheap.
+ * Upstream #53: a classifier that keeps none of the results it scored is
+ * either miscalibrated (that issue: everything under 0.3 with a 0.5
+ * threshold, on 16 real sessions) or right about a stretch whose tool output
+ * was all disposable (a session that only read files nobody referred to
+ * again). The scores cannot tell the two apart; `reviewKeepNothing` asks a
+ * model that can see the conversation, and failing that the user. Fewer than
+ * five scored results is too few to judge. The best result score comes back
+ * so the log can say how far off it was.
  */
 export function suspectCalibration(
   actions: readonly ActionDecision[],
@@ -390,6 +422,118 @@ export function suspectCalibration(
     best = Math.max(best, decision.scores.keepResult);
   }
   return { suspect: classified >= 5 && kept === 0, best };
+}
+
+export type KeepNothingReview = {
+  decision: 'proceed' | 'keep' | 'fallback';
+  /** Classifier call ids (`t3`) to keep verbatim on the re-run; only with `keep`. */
+  keep: string[];
+  /** One sentence for the log and the toast: what was found, who reviewed it, what was decided. */
+  why: string;
+};
+
+const trustKey = (sessionId: string): string => `context-os:trust:${sessionId}`;
+
+/** Whether the user already said "remove and don't ask again" this session. */
+export async function trustedForSession(
+  $: { store: { get: (key: string) => Promise<unknown> } },
+  sessionId: string,
+): Promise<boolean> {
+  try {
+    return (await $.store.get(trustKey(sessionId))) === true;
+  } catch {
+    return false;
+  }
+}
+
+export const REVIEW_ANSWERS = {
+  remove: 'Remove them (archived, restorable)',
+  trust: "Remove, and don't ask again this session",
+  summary: "Use Claude's summary instead",
+} as const;
+
+type ReviewHost = {
+  model: {
+    fork: (request: { prompt: string }) => Promise<{ text: string; usage: { input_tokens: number; output_tokens: number } } | null>;
+    complete: (request: { model: string; prompt: string; maxTokens?: number }) => Promise<string>;
+  };
+  ui: {
+    ask: (question: string, options?: { options?: readonly string[]; header?: string }) => Promise<string>;
+    log: (text: string) => void;
+  };
+  store: { get: (key: string) => Promise<unknown>; set: (key: string, value: unknown) => Promise<void> };
+};
+
+/**
+ * The second opinion when a classifier kept nothing. In order: the session's
+ * own model over its own transcript (`$.model.fork`, cache-shared, so it has
+ * read the conversation), then a small model with the user's turns quoted
+ * (`$.model.complete`), then the user (`$.ui.ask`). Only a "drop_all" from a
+ * model proceeds without asking; "keep_some" re-runs with those kept; anything
+ * else asks. With no one to ask (headless) the built-in summary — with the
+ * note — is the safe answer.
+ */
+export async function reviewKeepNothing(
+  $: ReviewHost,
+  sessionId: string,
+  messages: readonly Message[],
+  config: Pick<ContextOsConfig, 'preserveRecentMessages'>,
+  result: OptimizeResult,
+  threshold: number,
+  best: number,
+): Promise<KeepNothingReview> {
+  const candidates = reviewCandidates(messages, result.decisions, config.preserveRecentMessages ?? 6);
+  const ids = new Set(candidates.map((c) => c.id));
+  const facts = `the classifier kept none of the ${candidates.length} results it scored (best ${best.toFixed(2)}, threshold ${threshold})`;
+  let verdict: ReviewVerdict | undefined;
+  let reviewer = '';
+  try {
+    const forked = await $.model.fork({ prompt: reviewQuestion(candidates, threshold) });
+    if (forked) {
+      verdict = parseReview(forked.text, ids);
+      reviewer = `the session's model (${forked.usage.input_tokens + forked.usage.output_tokens} tokens)`;
+    }
+  } catch (error) {
+    $.ui.log(`context-os review: fork unavailable (${error instanceof Error ? error.message : String(error)})`);
+  }
+  if (!verdict) {
+    try {
+      const text = await $.model.complete({
+        model: 'haiku',
+        prompt: reviewQuestionWithContext(messages, candidates, threshold),
+        maxTokens: 400,
+      });
+      verdict = parseReview(text, ids);
+      reviewer = 'haiku (user turns only)';
+    } catch (error) {
+      $.ui.log(`context-os review: completion unavailable (${error instanceof Error ? error.message : String(error)})`);
+    }
+  }
+  if (verdict?.verdict === 'drop_all') {
+    return { decision: 'proceed', keep: [], why: `${facts}; ${reviewer} read the conversation and agreed they are disposable${verdict.reason ? `: ${verdict.reason}` : ''}` };
+  }
+  if (verdict?.verdict === 'keep_some') {
+    return { decision: 'keep', keep: verdict.keep, why: `${facts}; ${reviewer} asked to keep ${verdict.keep.join(', ')}${verdict.reason ? `: ${verdict.reason}` : ''}` };
+  }
+  const doubt = verdict ? `${reviewer} could not confirm that is right${verdict.reason ? ` (${verdict.reason})` : ''}` : 'no model could review it';
+  try {
+    const answer = await $.ui.ask(
+      `context-os: ${facts}, and ${doubt}. Every removed result stays in the archive and can be restored by id. Remove them, or use Claude's summary instead?`,
+      { header: 'context-os', options: [REVIEW_ANSWERS.remove, REVIEW_ANSWERS.trust, REVIEW_ANSWERS.summary] },
+    );
+    if (answer === REVIEW_ANSWERS.trust) {
+      try {
+        await $.store.set(trustKey(sessionId), true);
+      } catch {
+        // then it asks again next time; harmless
+      }
+      return { decision: 'proceed', keep: [], why: `${facts}; ${doubt}; the user chose to remove them and not be asked again this session` };
+    }
+    if (answer === REVIEW_ANSWERS.remove) return { decision: 'proceed', keep: [], why: `${facts}; ${doubt}; the user chose to remove them` };
+    return { decision: 'fallback', keep: [], why: `${facts}; ${doubt}; the user chose the built-in summary` };
+  } catch {
+    return { decision: 'fallback', keep: [], why: `${facts}; ${doubt}; no one to ask (headless), so the built-in summary with the note` };
+  }
 }
 
 /* ------------------------------------------------------------- /context */
@@ -650,7 +794,23 @@ export const register: Register = (on: On, options: PluginOptions) => {
       const classifier = chooseClassifier(configured, fetchFn, apiKey);
       classifierName = classifier.name;
       const archive = new FileArchive(engineFs($), { root: configured.archiveDir });
-      const optimized = await optimizeSession(event.messages, configured, classifier, archive, sessionId);
+      let optimized = await optimizeSession(event.messages, configured, classifier, archive, sessionId);
+      const threshold = configured.keepThreshold ?? classifier.defaultThreshold ?? 0.5;
+      // Upstream #53: a classifier that keeps nothing it scored is either
+      // miscalibrated or right about a disposable stretch; a model that has
+      // seen the conversation (or the user) decides which, see reviewKeepNothing.
+      let distrust: string | undefined;
+      const calibration = suspectCalibration(optimized.result.actions, optimized.result.report.classified);
+      if (calibration.suspect && !(await trustedForSession($, sessionId))) {
+        const review = await reviewKeepNothing($, sessionId, event.messages, configured, optimized.result, threshold, calibration.best);
+        $.ui.log(`context-os: ${review.why}`);
+        if (review.decision === 'keep') {
+          const reviewed = classifierWithKeeps(optimized.result.decisions, new Set(review.keep), `${classifier.name}+review`);
+          optimized = await optimizeSession(event.messages, configured, reviewed, archive, sessionId);
+        } else if (review.decision === 'fallback') {
+          distrust = review.why;
+        }
+      }
       const { result } = optimized;
       let { messages } = optimized;
       for (const line of reportLines(result.report)) $.ui.log(line);
@@ -698,18 +858,14 @@ export const register: Register = (on: On, options: PluginOptions) => {
       if (ratio < configured.minReductionRatio) {
         return fallback(`below ${percent(configured.minReductionRatio)} minimum: ${summary}`);
       }
-      const threshold = configured.keepThreshold ?? classifier.defaultThreshold ?? 0.5;
-      const calibration = suspectCalibration(result.actions, result.report.classified);
-      if (calibration.suspect) {
-        return fallback(
-          `classifier kept none of ${result.report.classified} scored results (best result score ${calibration.best.toFixed(2)}, threshold ${threshold}); suspect calibration`,
-        );
-      }
+      if (distrust) return fallback(distrust);
       safeNotify(
         $,
-        `context-os kept ${messages.length}/${event.messages.length} messages, archived ${result.archived.length} units, no summary (${summary})`,
+        `context-os kept ${messages.length}/${event.messages.length} messages, archived ${result.archived.length} units, no summary (${summary})${
+          calibration.suspect ? ' — reviewed, see the log' : ''
+        }`,
       );
-      return { messages };
+      return { messages: rechain(messages) };
     } catch (error) {
       return fallback(error instanceof Error ? error.message : String(error));
     }
