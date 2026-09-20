@@ -50,17 +50,29 @@ of 27 probes for good, in 82 s per compaction against 47 ms here.
 
 ## Install in Claude Code
 
-```json
-// ~/.claude/settings.json
-{ "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
-```
+Needs Claude Code 2.1.274 or newer (`claude --version`); function hooks did
+not exist before that.
 
-```sh
-claude plugin marketplace add <your-github-user>/context-os
-claude plugin install context-os@context-os
-```
+1. Turn on function hooks, and give the plugin a Jev key if you have one
+   (leave `TYPESAFE_API_KEY` out to run the local heuristic classifier — no
+   network, no key, still verbatim and reversible):
 
-Or from a checkout: `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir .`
+   ```json
+   // ~/.claude/settings.json
+   { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1", "TYPESAFE_API_KEY": "apikey_…" } }
+   ```
+
+2. Install at user scope, so every project gets it:
+
+   ```sh
+   claude plugin marketplace add MusicStudioNYC/context-os
+   claude plugin install context-os@context-os
+   ```
+
+3. Start a new session and type `/context`: under Claude Code's own usage
+   grid you should see a `context-os` line naming the classifier in use.
+
+Or from a checkout, for one session: `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir .`
 
 Auto-compaction: the plugin asks the host to compact once the live context
 holds `compactAtTokens` tokens (default 120,000 — a count, so "big" does not
