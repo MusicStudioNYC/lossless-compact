@@ -72,10 +72,14 @@ them summarize. `/context` shows the usage.
 Without a `TYPESAFE_API_KEY` the plugin runs the local heuristic classifier —
 no network, ~200 ms on a 300k-token transcript. With a key (env var, settings
 `env`, or the plugin's `apiKey` option) it uses Jev. `/compact` and
-auto-compaction (at `compactAtPercent`, default 60 %) both go through it; the
-toast reads `context-os kept N/M messages, archived K units, no summary (…)`,
-or `fallback to built-in summary (…)` when it could not remove enough or
-something failed.
+auto-compaction both go through it; the toast reads `context-os kept N/M
+messages, archived K units, no summary (…)`, or `fallback to built-in summary
+(…)` when it could not remove enough or something failed — in that case the
+note still goes into the summarized transcript, since the archive and the
+snapshot were written first. In a headless session (`claude -p`, the SDK)
+the host does not let a plugin start a compaction between turns yet, so the
+`compactAtTokens` trigger logs and waits; `/compact` and the host's own
+near-limit compaction still run through the hook there.
 
 ### `/context`
 

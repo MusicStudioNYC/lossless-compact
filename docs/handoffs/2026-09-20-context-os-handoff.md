@@ -1,8 +1,8 @@
 # Handoff — context-os build, 2026-09-20
 
 **Status:** open. Successor: mark this done when Phase 3 (durable memory) lands.
-**Repo:** `C:\Users\Bunkspunkles\Dropbox\Websites\fast-jev-compaction` (branch `main`, commit `7747351`, clean).
-**Deployed vs local:** nothing is pushed anywhere yet. `git remote -v` shows only `upstream` (tamaratran); the owner chose to push to `<owner>/context-os` — create that empty GitHub repo, then `git remote add origin <url> && git push -u origin main`. No npm publish. The plugin has not yet been loaded in a live Claude Code session.
+**Repo:** `C:\Users\Bunkspunkles\Dropbox\Websites\fast-jev-compaction` (branch `main`, clean; the smoke-test chat of 2026-09-20 added commits `2812cae`…`969b482` plus this update — see `git log`).
+**Deployed vs local:** nothing is pushed anywhere yet. `git remote -v` shows only `upstream` (tamaratran); the owner chose to push to `<owner>/context-os` — create that empty GitHub repo, then `git remote add origin <url> && git push -u origin main`. No npm publish. The plugin **has** run live in Claude Code 2.1.278 (headless `-p`; see "Live smoke test" below and docs/evals.md).
 **Jev key:** `~/.typesafe_key` (one line, `apikey_…`, 108 chars; not in the repo). Verified live against `jev-1.13.0`. Use it as `TYPESAFE_API_KEY="$(cat ~/.typesafe_key)"`; for the plugin put it in `~/.claude/settings.json` `env` or the plugin's `apiKey` option.
 
 ## What was asked
@@ -33,9 +33,19 @@
 - A bare `/context` now calls `next(event)` so Claude Code's built-in usage grid still shows, with our archive status underneath; subcommands are ours. (The built-in command exists — registering the same name intercepts it.)
 - Settings UX, owner asked for options: recommended A (plugin `userConfig` + `/config`, already there) now, B (per-project `.context-os/config.json` + `/context set <key> <value>`, precedence project › /config › defaults, `/context` shows effective values) as the next small step; C (a plugin-drawn settings panel via `ui.render`) only if the product gets users. Owner's choice pending.
 
+## Live smoke test (done 2026-09-20, second chat)
+
+Driven headless. `claude.exe` 2.1.278 is at `%USERPROFILE%\.cursor\extensions\anthropic.claude-code-2.1.278-win32-x64\resources\native-binary\claude.exe` (PATH still has 2.1.238). Driver per turn: `claude -p --session-id <uuid> --plugin-dir . --model sonnet --output-format stream-json --verbose --include-hook-events --allowedTools Read,Glob,Grep --debug-file <log> "<prompt>"`, then `--resume <uuid>`; env `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1`, `TYPESAFE_API_KEY=…` and **`MSYS_NO_PATHCONV=1`** (Git Bash otherwise turns `/compact` into `C:/Program Files/Git/compact`). The hook's `$.ui.log` lines land in the debug file as `[context-os] $.ui.log: …`. The session (`fb138cff-7114-4821-846d-8b72fc4b7d84` under `~/.claude/projects/c--Users-Bunkspunkles-Dropbox-Websites-fast-jev-compaction/`) and its `.context-os/` archive are still on disk.
+
+Verified: the plugin loads and validates on 2.1.278; `session.compact` returned our 19 messages for a 258k-token transcript in 819 ms (Jev 400 ms) and the host logged "a hook's 19 messages stand; core never ran"; archive index + shard and the 1 MB snapshot were written; the note is message 2 and the raw `.jsonl` path is found from inside the sandbox (`$.fs.exists` works on absolute paths outside the project); bare `/context` shows the host grid plus ours, `list`/`why`/`restore` answer in ~10 ms; `prompt.submit` gets `event.text`, retrieval ran in 126 ms and the model answered from the `<retrieved_context>` block and said so. The 10 s hook budget is not a constraint (the host waited 135 s for a compaction that included its own summary).
+
+Found and fixed, one commit each: the first compaction of a session fell back to the built-in summary (the host forwards `$.fs.read`'s ENOENT as a plain Error, message only, and `FileArchive` rethrew); removed calls left no marker because Claude Code gives every call its own text-less message (now a marker-only message, runs merged; ~3–5 points of reduction); retrieval handed over the head of a 40k-char record (now the best window around the query terms) and ranked prose words above `FsEntry` (now code-cased terms ×3, dedupe by contentHash, prose-only prompts retrieve nothing); every fallback splices a `summarized` note into the built-in summary; `$.command.register('context')` is refused as the built-in name but the `command.run` filter intercepts it anyway; `/context` status names the classifier that ran.
+
+Still open: **the `turn.complete` auto-trigger could not be exercised** — `$.session.compact()` throws "not available in a headless (-p / SDK) session yet"; it needs one interactive session that crosses 120k tokens. `/context restore` returning `context: [block]` was only seen as text (a command in `-p` runs no model turn).
+
 ## What is left, in order
 
-1. **Live smoke test in Claude Code.** The `claude` CLI on PATH is 2.1.238 (function hooks need 2.1.274+; `validate:plugin` fails on it) but the VS Code extension runs 2.1.278 — this very session's transcript says so. Run `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir .` with a ≥ 2.1.274 binary, drive a long session, `/compact`, `/context`, check `.context-os/` is written, check `prompt.submit` retrieval appears in the model's context. Unverified assumptions to confirm: `$.fs.list` entry shape (`{name}`), `$.command.register` from `session.start`, `event.text` on `prompt.submit`, the 10 s hook budget on a 300k-token transcript.
+1. **Interactive verification of auto-compaction** in the VS Code extension: open Claude Code 2.1.278 in this repo with the plugin loaded, work past 120k tokens, expect the toast `context-os kept N/M messages, archived K units, no summary (…)` without typing `/compact`; then a prompt naming something archived, expect the model to cite a `retrieved_context` block; then `/context restore <id>` followed by a question answerable only from it.
 2. **Label ~5 real sessions, model-assisted** (owner chose this): a subagent reads `datasets/real/<case>/transcript.json`, writes `labels.json` (must_keep / nice_to_keep / safe_to_truncate / safe_to_drop per `tool_use_id`, plus probes), the owner spot-checks; then `npm run eval -- --dataset datasets/real --modes OURS_JEV,OURS_HEURISTIC,UPSTREAM_FAST_JEV` gives the first real false-drop rate (Jev cassettes for the 12 real cases already exist). Re-check the 0.35 default against those labels.
 3. **Per-project settings** (option B above, ~80 lines in the hook + tests) — owner confirmed B.
 4. **Windowed classification** (upstream #52): when `fitState` reaches the `old messages collapsed` stage or worse, Jev is asked about calls it cannot see. Score in windows (build the state per batch with that batch's messages in full). `JevClassifier.score` is the place.
@@ -84,6 +94,10 @@
 - `lexicalScore` in `memory-store.ts` is the old ranker kept for tests; `rankRecords` is what search uses.
 - vitest's default fork pool OOM'd while five agents ran in parallel; alone it is fine (`npm test` 1.4 s).
 - `.gitattributes` forces LF; git on this machine has autocrlf and prints warnings — harmless.
+- The upstream #53 guard (`suspectCalibration`: ≥ 5 scored, none kept → built-in summary) also fires on a session whose tool output really was all disposable (the first smoke run: 11 reads nobody referred to again). A score band was tried and dropped: the real #53 case was everything under 0.3 with a 0.5 threshold, which a band cannot tell apart. The fallback now carries the note, so a wrong trip costs a summary plus pointers, not loss. Whether to keep the guard is the owner's call (asked at the end of the smoke-test chat).
+- The compaction note is a synthetic `user` message and the host records it as the session's `last-prompt` until the next real prompt — cosmetic (session picker).
+- Auto-compaction cannot be started by the plugin in a headless (`-p` / SDK) session — host limitation, logged and skipped; `/compact` and the host's own trigger still route through the hook.
+- Patching `hooks/context-os.ts` through `node - <<EOF` heredocs mangles template literals and `\b`; use the Edit tool for multi-line TypeScript changes.
 
 ## How to test this
 
