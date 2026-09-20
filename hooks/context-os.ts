@@ -1,7 +1,8 @@
-import type { On, PluginOptions, Register, SessionMessage, TurnCompleteInput } from 'claude-code';
+import type { On, PluginOptions, Register, SessionCompactResult, SessionMessage, TurnCompleteInput } from 'claude-code';
 
 import { FileArchive, type TextFs } from '../src/archive/file-store.js';
 import type { ArchiveRecord, ArchiveStore } from '../src/archive/types.js';
+import type { ActionDecision } from '../src/core/actions.js';
 import { HeuristicClassifier } from '../src/classifiers/heuristic.js';
 import { JevClassifier, type JevQuestionStyle } from '../src/classifiers/jev.js';
 import type { Classifier } from '../src/classifiers/types.js';
@@ -325,19 +326,26 @@ export function compactionNote(details: {
   snapshotPath?: string;
   archiveDir: string;
   rawLogPath?: string;
+  /** True when Claude Code's built-in summary replaced the transcript after all (a fallback). */
+  summarized?: boolean;
 }): string {
   const { actions } = details.report;
   const removed = actions.ARCHIVE_ONLY + actions.KEEP_HEAD_TAIL + actions.RERUN_ON_DEMAND + actions.DROP_REDUNDANT;
+  const units = `${removed} tool interaction${removed === 1 ? '' : 's'} (~${details.report.tokens.archived.toLocaleString('en-US')} tokens)`;
   const lines = [
-    `[context-os] This conversation was compacted at ${details.at} (compaction ${details.compactionId}): ${removed} tool interaction${
-      removed === 1 ? '' : 's'
-    } (~${details.report.tokens.archived.toLocaleString('en-US')} tokens) were removed from the active context and archived verbatim. Nothing was summarized or paraphrased; user and assistant messages are untouched. If you need any removed message, the full history is on disk:`,
+    details.summarized
+      ? `[context-os] This conversation was compacted at ${details.at} by Claude Code's built-in summary; the message above is a paraphrase, not the original text. Before the summary was written, context-os (compaction ${details.compactionId}) archived ${units} verbatim${
+          details.snapshotPath ? ' and saved the exact pre-compaction transcript' : ''
+        }. If you need anything the summary lost, the full history is on disk:`
+      : `[context-os] This conversation was compacted at ${details.at} (compaction ${details.compactionId}): ${units} were removed from the active context and archived verbatim. Nothing was summarized or paraphrased; user and assistant messages are untouched. If you need any removed message, the full history is on disk:`,
   ];
   if (details.snapshotPath) {
     lines.push(`- Exact pre-compaction transcript (JSON array of messages): ${details.snapshotPath} — grep it, or read a slice.`);
   }
   lines.push(
-    `- Every archived item, with the reason it was removed: ${details.archiveDir}/archive/ — a stub in this transcript names its id (e_…); grep for that id under ${details.archiveDir}/archive to find the record.`,
+    details.summarized
+      ? `- Every archived item, with the reason it was removed: ${details.archiveDir}/archive/ — grep for a file path, an error line or a value there to find the record and its id (e_…).`
+      : `- Every archived item, with the reason it was removed: ${details.archiveDir}/archive/ — a stub in this transcript names its id (e_…); grep for that id under ${details.archiveDir}/archive to find the record.`,
   );
   if (details.rawLogPath) {
     lines.push(`- Raw Claude Code session log, never modified by compaction: ${details.rawLogPath}`);
@@ -351,6 +359,37 @@ export function withCompactionNote(messages: readonly Message[], note: string): 
   const noteMessage: Message = { role: 'user', text: note, toolUses: [] };
   if (messages.length === 0) return [noteMessage];
   return [messages[0]!, noteMessage, ...messages.slice(1)];
+}
+
+/** The same insertion over the host's own compacted transcript (its summary comes first). */
+export function withCompactionNoteSession(messages: readonly SessionMessage[], note: string): SessionMessage[] {
+  const noteMessage: SessionMessage = { role: 'user', text: note, toolUses: [] };
+  if (messages.length === 0) return [noteMessage];
+  return [messages[0]!, noteMessage, ...messages.slice(1)];
+}
+
+/**
+ * Upstream #53: a classifier that keeps none of the results it scored is more
+ * often miscalibrated than right (that issue: everything under 0.3 with a 0.5
+ * threshold, on 16 real sessions), so the transcript goes to the built-in
+ * summary instead — with the note, since the archive and snapshot are already
+ * on disk. Fewer than five scored results is too few to judge. The best
+ * result score comes back so the log can say how far off it was; a session
+ * whose tool output really was all disposable (a smoke test that only reads
+ * files) trips this too, and the note is what makes that cheap.
+ */
+export function suspectCalibration(
+  actions: readonly ActionDecision[],
+  classified: number,
+): { suspect: boolean; best: number } {
+  let best = 0;
+  let kept = 0;
+  for (const decision of actions) {
+    if (!decision.scores) continue;
+    if (decision.action === 'KEEP_VERBATIM') kept += 1;
+    best = Math.max(best, decision.scores.keepResult);
+  }
+  return { suspect: classified >= 5 && kept === 0, best };
 }
 
 /* ------------------------------------------------------------- /context */
@@ -384,7 +423,7 @@ export async function statusText(
     `context-os — session ${sessionId}`,
     `Active context:        ~${formatTokens(active)} tokens (est.), ${messages.length} messages, ${ledger.interactions.size} tool interactions`,
     `Archived this session: ~${formatTokens(stats.tokens)} tokens in ${stats.records} records`,
-    `Classifier:            ${classifier}`,
+    `Classifier:            ${last?.report.classifier ?? classifier}${last ? '' : ' (configured)'}`,
     last
       ? `Last compaction:       ${last.at} — ${last.summary}`
       : 'Last compaction:       none yet',
@@ -557,7 +596,9 @@ export const register: Register = (on: On, options: PluginOptions) => {
       });
     } catch (error) {
       try {
-        $.ui.log(`context-os: /context not registered (${error instanceof Error ? error.message : String(error)})`);
+        // Claude Code refuses the built-in name; the command.run hook below
+        // still intercepts it (seen live on 2.1.278), so nothing is lost.
+        $.ui.log(`context-os: /context is the host's own here; subcommands run through the command.run hook (${error instanceof Error ? error.message : String(error)})`);
       } catch {
         // ignore
       }
@@ -590,6 +631,15 @@ export const register: Register = (on: On, options: PluginOptions) => {
   });
 
   on('session.compact', async ($, event, next) => {
+    // The archive and snapshot are on disk before any decision to fall back,
+    // so the built-in summary still gets a note saying where they are.
+    let fallbackNote: string | undefined;
+    const fallback = async (reason: string): Promise<SessionCompactResult> => {
+      safeNotify($, `fallback to built-in summary (${reason})`);
+      const built = await next(event);
+      if (!fallbackNote || built.skip !== undefined || !built.messages?.length) return built;
+      return { ...built, messages: withCompactionNoteSession(built.messages, fallbackNote) };
+    };
     try {
       const sessionId = await $.session.id();
       const apiKey = await getApiKey($, configured);
@@ -621,15 +671,16 @@ export const register: Register = (on: On, options: PluginOptions) => {
         if (configured.noteRemoved) {
           const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'));
           const rawLogPath = await rawSessionLogPath(engineFs($), home, cwd, sessionId);
-          const note = compactionNote({
+          const details = {
             at,
             compactionId: result.report.compactionId,
             report: result.report,
             ...(snapshotPath ? { snapshotPath } : {}),
             archiveDir: absolute(root),
             ...(rawLogPath ? { rawLogPath } : {}),
-          });
-          messages = toSessionMessages(event.messages, withCompactionNote(result.messages, note));
+          };
+          messages = toSessionMessages(event.messages, withCompactionNote(result.messages, compactionNote(details)));
+          fallbackNote = compactionNote({ ...details, summarized: true });
         }
       }
       for (const line of decisionLogLines(result)) $.ui.log(line);
@@ -645,17 +696,14 @@ export const register: Register = (on: On, options: PluginOptions) => {
       }
       const ratio = reductionRatio(result);
       if (ratio < configured.minReductionRatio) {
-        safeNotify($, `fallback to built-in summary (below ${percent(configured.minReductionRatio)} minimum: ${summary})`);
-        return next(event);
+        return fallback(`below ${percent(configured.minReductionRatio)} minimum: ${summary}`);
       }
-      // Upstream #53: a classifier that keeps nothing it scored is more likely
-      // miscalibrated than right; do not trust it with the transcript.
-      const evictedAll =
-        result.report.classified >= 5 &&
-        result.actions.filter((a) => a.scores && (a.action === 'KEEP_VERBATIM')).length === 0;
-      if (evictedAll) {
-        safeNotify($, `fallback to built-in summary (classifier kept none of ${result.report.classified} scored results; suspect calibration)`);
-        return next(event);
+      const threshold = configured.keepThreshold ?? classifier.defaultThreshold ?? 0.5;
+      const calibration = suspectCalibration(result.actions, result.report.classified);
+      if (calibration.suspect) {
+        return fallback(
+          `classifier kept none of ${result.report.classified} scored results (best result score ${calibration.best.toFixed(2)}, threshold ${threshold}); suspect calibration`,
+        );
       }
       safeNotify(
         $,
@@ -663,8 +711,7 @@ export const register: Register = (on: On, options: PluginOptions) => {
       );
       return { messages };
     } catch (error) {
-      safeNotify($, `fallback to built-in summary (${error instanceof Error ? error.message : String(error)})`);
-      return next(event);
+      return fallback(error instanceof Error ? error.message : String(error));
     }
   });
 

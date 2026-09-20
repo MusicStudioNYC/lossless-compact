@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import type { SessionMessage } from 'claude-code';
 import type { TextFs } from '../src/archive/file-store.js';
 import type { OptimizeReport } from '../src/engine/optimize.js';
-import { compactionNote, rawSessionLogPath, withCompactionNote, writeSnapshot } from '../hooks/context-os.js';
+import {
+  compactionNote,
+  rawSessionLogPath,
+  suspectCalibration,
+  withCompactionNote,
+  withCompactionNoteSession,
+  writeSnapshot,
+} from '../hooks/context-os.js';
 
 function fakeFs(): TextFs & { files: Map<string, string> } {
   const files = new Map<string, string>();
@@ -135,6 +142,57 @@ describe('compactionNote / withCompactionNote', () => {
     );
     expect(messages.map((m) => m.text)).toEqual(['first', 'NOTE', 'second']);
     expect(messages[1]!.role).toBe('user');
+  });
+
+  it('the summarized variant says the summary is a paraphrase and still points at every copy', () => {
+    const note = compactionNote({
+      at: '2026-09-20T00:00:00.000Z',
+      compactionId: 'c_1',
+      report,
+      snapshotPath: 'C:/proj/.context-os/snapshots/s1/c_1.json',
+      archiveDir: 'C:/proj/.context-os',
+      summarized: true,
+    });
+    expect(note).toMatch(/built-in summary; the message above is a paraphrase/);
+    expect(note).toContain('archived 4 tool interactions (~60 tokens) verbatim and saved the exact pre-compaction transcript');
+    expect(note).toContain('C:/proj/.context-os/snapshots/s1/c_1.json');
+    expect(note).toContain('C:/proj/.context-os/archive/');
+    expect(note).not.toContain('Nothing was summarized');
+    // No stubs survive a summary, so it must not tell the model to look for one.
+    expect(note).not.toContain('a stub in this transcript');
+  });
+
+  it('withCompactionNoteSession inserts after the host summary, keeping the host messages as given', () => {
+    const summary = { role: 'assistant' as const, text: 'summary', toolUses: [], handle: 'h1' };
+    const recent = { role: 'user' as const, text: 'recent', toolUses: [], handle: 'h2' };
+    const messages = withCompactionNoteSession([summary, recent], 'NOTE');
+    expect(messages.map((m) => m.text)).toEqual(['summary', 'NOTE', 'recent']);
+    expect(messages[0]).toBe(summary);
+    expect(messages[2]).toBe(recent);
+    expect(withCompactionNoteSession([], 'NOTE').map((m) => m.text)).toEqual(['NOTE']);
+  });
+});
+
+describe('suspectCalibration (upstream #53)', () => {
+  const decision = (action: 'KEEP_VERBATIM' | 'ARCHIVE_ONLY', keepResult: number, scored = true) =>
+    ({ id: 'x', action, reasons: [], ...(scored ? { scores: { keepCall: keepResult, keepResult } } : {}) }) as never;
+
+  it('distrusts a classifier that kept none of five or more scored results, reporting its best score', () => {
+    const marginal = [0.34, 0.31, 0.3, 0.28, 0.33].map((s) => decision('ARCHIVE_ONLY', s));
+    expect(suspectCalibration(marginal, 5)).toEqual({ suspect: true, best: 0.34 });
+    // The live smoke test: eleven file reads nothing referred to again, all far below 0.35.
+    const low = [0.14, 0.1, 0.09, 0.08, 0.08, 0.08].map((s) => decision('ARCHIVE_ONLY', s));
+    expect(suspectCalibration(low, 6)).toEqual({ suspect: true, best: 0.14 });
+  });
+
+  it('never fires below five scored results, or when anything scored was kept', () => {
+    const low = [0.3, 0.3, 0.3, 0.3].map((s) => decision('ARCHIVE_ONLY', s));
+    expect(suspectCalibration(low, 4).suspect).toBe(false);
+    const oneKept = [...low, decision('KEEP_VERBATIM', 0.6), decision('ARCHIVE_ONLY', 0.3)];
+    expect(suspectCalibration(oneKept, 6).suspect).toBe(false);
+    // Unscored keeps (pins, protections) do not count as the classifier keeping something.
+    const pinnedOnly = [...low, decision('ARCHIVE_ONLY', 0.3), decision('KEEP_VERBATIM', 1, false)];
+    expect(suspectCalibration(pinnedOnly, 5).suspect).toBe(true);
   });
 });
 
