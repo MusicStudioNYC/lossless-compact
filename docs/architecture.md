@@ -7,7 +7,7 @@ anything and without making anything unrecoverable.
 
 ```
 host transcript (Claude Code SessionMessage[])
-        │  hooks/lossless-compact.ts  (adapter: in/out mapping, $.fs archive, /context)
+        │  hooks/lossless-compact.ts  (adapter: in/out mapping, $.fs archive, /lossless)
         ▼
    Message[]  ──►  buildLedger  ──►  NormalizedEvent[] with stable ids
         │
@@ -37,7 +37,7 @@ host transcript (Claude Code SessionMessage[])
 The hook sandbox (Claude Code ≥ 2.1.274 function hooks) has **no Node at
 all**: `$.fs` gives whole-file read/write under the project directory capped at
 4 MiB per call, `$.store` is a 4 MiB global JSON KV, `$.http.fetch` is the only
-network, `$.command.register` adds `/context`, `prompt.submit` can append up to
+network, `$.command.register` adds `/lossless`, `prompt.submit` can append up to
 32k chars of hidden `context` before a turn (the rehydration channel), and
 `$.model.fork` runs a cheap completion over the live transcript (the memory
 extraction channel). Each hook dispatch has a 10 s budget.
@@ -51,7 +51,7 @@ extraction channel). Each hook dispatch has a 10 s budget.
   `KEEP_HEAD_TAIL`, `EXTRACT_MEMORY_AND_ARCHIVE`, `ARCHIVE_ONLY`,
   `REPLACE_WITH_REFERENCE`, `RERUN_ON_DEMAND`, `DROP_REDUNDANT`. Every action
   but the first two archives the exact original.
-- `ActionDecision`: action + `reasons[]` (shown by `/context why`) +
+- `ActionDecision`: action + `reasons[]` (shown by `/lossless why`) +
   `protectedBy[]` + `confidence` + `archiveIds[]`.
 - `ArchiveRecord` (`src/archive/types.ts`): the event, its hash and tokens,
   the compaction that evicted it, the action and reasons, `related` links

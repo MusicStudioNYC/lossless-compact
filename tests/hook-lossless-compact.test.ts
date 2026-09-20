@@ -227,7 +227,7 @@ describe('runContextCommand', () => {
     const { text } = await runContextCommand(`why ${recordId}`, deps);
     expect(text).toContain('Action: ARCHIVE_ONLY');
     expect(text).toContain('Reasons:');
-    expect(text).toContain(`/context restore ${recordId} brings it back`);
+    expect(text).toContain(`/lossless restore ${recordId} brings it back`);
   });
 
   it('show <id> returns the retrieved_context block with the exact content', async () => {
@@ -259,10 +259,10 @@ describe('runContextCommand', () => {
   });
 
   it('shows a usage message when an id or query is missing', async () => {
-    expect((await runContextCommand('why', deps)).text).toBe('Usage: /context why <id>');
-    expect((await runContextCommand('show', deps)).text).toBe('Usage: /context show <id>');
-    expect((await runContextCommand('restore', deps)).text).toBe('Usage: /context restore <id>');
-    expect((await runContextCommand('retrieve', deps)).text).toBe('Usage: /context retrieve <query>');
+    expect((await runContextCommand('why', deps)).text).toBe('Usage: /lossless why <id>');
+    expect((await runContextCommand('show', deps)).text).toBe('Usage: /lossless show <id>');
+    expect((await runContextCommand('restore', deps)).text).toBe('Usage: /lossless restore <id>');
+    expect((await runContextCommand('retrieve', deps)).text).toBe('Usage: /lossless retrieve <query>');
   });
 
   it('shows a not-found message for an unknown id', async () => {

@@ -130,7 +130,7 @@ describe('compactionNote / withCompactionNote', () => {
     expect(note).toContain('C:/proj/.lossless-compact/snapshots/s1/c_1.json');
     expect(note).toContain('C:/proj/.lossless-compact/archive/');
     expect(note).toContain('C:/Users/me/.claude/projects/c--proj/s1.jsonl');
-    expect(note).toContain('/context restore <id>');
+    expect(note).toContain('/lossless restore <id>');
     expect(note).not.toMatch(/summar(y|ized) of/);
   });
 

@@ -156,8 +156,8 @@ export function stubResultText(
   const what = `${text.length - headChars} more chars of this ${call.tool} result${call.isError ? ' (error)' : ''}`;
   const how =
     action === 'RERUN_ON_DEMAND'
-      ? `re-run ${call.tool} with the same input to reproduce it, or /context restore ${archiveId}`
-      : `/context restore ${archiveId} brings it back verbatim, or re-run the tool`;
+      ? `re-run ${call.tool} with the same input to reproduce it, or /lossless restore ${archiveId}`
+      : `/lossless restore ${archiveId} brings it back verbatim, or re-run the tool`;
   const about = inputSummary(call);
   return `${head}[lossless-compact archived ${archiveId}: ${what}${about ? ` (${about})` : ''}; ${how}]`;
 }
@@ -168,7 +168,7 @@ export function removedCallsMarker(removed: readonly { call: ToolCall; archiveId
   // session (Claude Code gives each call its own message), and the
   // compaction note explains the mechanism once.
   const items = removed.map((r) => `${`${r.call.tool} ${inputSummary(r.call)}`.trim()} → ${r.archiveId}`).join('; ');
-  return `[lossless-compact archived ${removed.length} tool call${removed.length === 1 ? '' : 's'} made here: ${items} — out of context; /context restore <id>]`;
+  return `[lossless-compact archived ${removed.length} tool call${removed.length === 1 ? '' : 's'} made here: ${items} — out of context; /lossless restore <id>]`;
 }
 
 interface Applied {

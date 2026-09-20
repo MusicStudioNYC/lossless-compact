@@ -63,7 +63,7 @@ export interface ClassifierScores {
 
 /**
  * Why a decision came out the way it did, one entry per contributing rule or
- * signal; shown verbatim by `/context why`.
+ * signal; shown verbatim by `/lossless why`.
  */
 export interface DecisionReason {
   /** Machine-readable, e.g. `explicit_constraint`, `recent`, `dependency`, `jev_result`. */

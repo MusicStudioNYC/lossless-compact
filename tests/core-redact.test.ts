@@ -172,7 +172,7 @@ describe('stable placeholders', () => {
 
 describe('user path redaction', () => {
   it('redacts the user segment only when redactUserPaths is enabled', () => {
-    const text = 'reading C:\\Users\\bunkspunkles\\project\\file.ts';
+    const text = 'reading C:\\Users\\somebody\\project\\file.ts';
     const off = new Redactor().redact(text);
     expect(off).toBe(text);
 

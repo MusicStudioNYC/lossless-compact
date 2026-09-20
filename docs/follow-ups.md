@@ -8,7 +8,7 @@ handoff's "what is left" list when it is picked up; delete it when done.
 | 2026-09-20 | Windowed Jev classification when `fitState` passes `texts abridged` (upstream #52) | Needs cassettes to measure; design in handoff |
 | 2026-09-20 | Raise `maxRequestTokens` default 30k → 60k (TypeSafe: 64k/request, 32k state) | Untested against the live API; halves request count when confirmed |
 | 2026-09-20 | Upstream #38 (question headroom before fitting), #39 (`/compact` instructions), #32 (pending calls in state) | Hardening, no measured impact yet |
-| 2026-09-20 | Per-project settings: `.lossless-compact/config.json` + `/context set` (option B) | Owner confirmed; after the smoke test |
+| 2026-09-20 | Per-project settings: `.lossless-compact/config.json` + `/lossless set` (option B) | Owner confirmed; after the smoke test |
 | 2026-09-20 | Cache read/write metrics from `LoadedTranscript.usage` in the report | Plan §3.5; data is loaded, not aggregated |
 | 2026-09-20 | Label ~5 real sessions model-assisted (`labels.json`) and re-check the Jev 0.35 default | Owner chose model-assisted; next chat after the smoke test |
 | 2026-09-20 | Embedding-based retrieval + query expansion from recent context | Plan §14; lexical v1 recovers 2/3 needles |

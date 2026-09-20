@@ -5,13 +5,19 @@ Instead of summarizing old turns, it keeps the smallest sufficient working set
 **verbatim**, moves everything it removes into an exact, searchable
 **archive**, and can bring any of it back by id — so compaction frees the
 context window without losing anything. Every decision is explainable
-(`/context why <id>`), nothing is paraphrased, and a wrong call is
+(`/lossless why <id>`), nothing is paraphrased, and a wrong call is
 recoverable rather than fatal.
 
 It ships as a Claude Code plugin (function hooks, 2.1.274+) and as an npm
 library, and is a fork of
 [tamaratran/fast-jev-compaction](https://github.com/tamaratran/fast-jev-compaction)
 (MIT) — see [UPSTREAM.md](UPSTREAM.md) for what was kept, fixed and diverged.
+
+Works with:
+
+- ✅ **Claude Code** — terminal CLI and the VS Code extension
+- ✅ **Cursor** — through the Claude Code extension for Cursor (same plugin, same install)
+- ⏳ **Codex** — coming soon; the engine is host-agnostic (see [docs/plan.md](docs/plan.md), "Codex second")
 
 ## What it does at compaction time
 
@@ -74,7 +80,7 @@ score a summary, and ~6 % noisy). Method and full tables:
   set of rules — which tools are cheap to re-run, what reads like an error,
   how old a result is — with no model and no network. Same reduction; it
   misses three of the six needles that nothing later refers to — the semantic
-  call Jev is for — but archives them, so `/context restore` or prompt
+  call Jev is for — but archives them, so `/lossless restore` or prompt
   retrieval brings them back.
 
 <picture>
@@ -130,18 +136,18 @@ not exist before that.
    claude plugin install lossless-compact@lossless-compact
    ```
 
-3. Start a new session and type `/context status`. The text report should
-   start with `lossless-compact` and name `jev` (with a key) or `ruleset` (without
-   one). A bare `/context` remains Claude Code's native usage grid and shows a
-   short `lossless-compact active` toast; the host does not let plugins add rows to
-   that modal.
+3. Start a new session and type `/lossless` (it is in the slash-command menu
+   from the first keystroke). The report should start with `lossless-compact`
+   and name `jev` (with a key) or `ruleset` (without one). Claude Code's own
+   `/lossless` is untouched.
 
    A session that was already open before step 2 does not have the plugin, and
    `/reload-plugins` does not load a hooks module into a running process (it
    reports `hooks modules unchanged`). In the VS Code extension every chat tab
    is its own `claude` process, so open a new chat (or resume the old session
    in one). In a tab without the plugin, `/compact` is Claude Code's own
-   summary — a minute or more on a large context, with no `lossless-compact` toast.
+   summary — a minute or more on a large context, and no `[lossless-compact]` note
+   afterwards.
 
 Or from a checkout, for one session: `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir .`
 
@@ -150,7 +156,7 @@ holds `compactAtTokens` tokens (default 120,000 — a count, so "big" does not
 move when the model's window does; `compactAtPercent` is an optional second
 trigger, off by default), and every compaction — yours, Claude Code's own
 near the limit, or the plugin's — goes through the same hook, so none of
-them summarize. `/context status` shows the plugin's usage and archive state.
+them summarize. `/lossless` shows the plugin's usage and archive state.
 
 Without a `TYPESAFE_API_KEY` the plugin runs the local ruleset —
 no model, no network, ~200 ms on a 300k-token transcript. With a key (env var, settings
@@ -179,20 +185,22 @@ the host does not let a plugin start a compaction between turns yet, so the
 `compactAtTokens` trigger logs and waits; `/compact` and the host's own
 near-limit compaction still run through the hook there.
 
-### `/context`
+### `/lossless`
 
 ```
-/context                    Claude Code's own usage grid, plus a lossless-compact active/classifier toast
-/context status             active tokens, archived tokens, constraints found, classifier, last compaction
-/context list [n]           newest archived records
-/context why <id>           the action and every reason behind it
-/context show <id>          print the exact archived content
-/context restore <id>       put the exact content back in front of the model for this turn
-/context retrieve <query>   lexical search over the archive
+/lossless [status]           active tokens, archived tokens, constraints found, classifier, last compaction
+/lossless list [n]           newest archived records
+/lossless why <id>           the action and every reason behind it
+/lossless show <id>          print the exact archived content
+/lossless restore <id>       put the exact content back in front of the model for this turn
+/lossless retrieve <query>   lexical search over the archive
 ```
+
+It is the plugin's own command, so it is listed in the slash-command menu;
+Claude Code's `/lossless` (the usage grid) is left alone.
 
 Archive ids appear in the stubs the model sees, e.g.
-`[lossless-compact archived e_3f9a…: 8421 more chars of this Read result (file_path=src/a.ts); /context restore e_3f9a… brings it back verbatim, or re-run the tool]`.
+`[lossless-compact archived e_3f9a…: 8421 more chars of this Read result (file_path=src/a.ts); /lossless restore e_3f9a… brings it back verbatim, or re-run the tool]`.
 
 ### Plugin options
 

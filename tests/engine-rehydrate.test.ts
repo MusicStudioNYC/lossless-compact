@@ -112,16 +112,16 @@ describe('rehydrateForPrompt', () => {
   it('retrieves nothing for short prompts, slash commands, or unrelated prompts', async () => {
     const archive = new MemoryArchive(all);
     expect((await rehydrateForPrompt(archive, 's1', 'ok go')).blocks).toEqual([]);
-    expect((await rehydrateForPrompt(archive, 's1', '/context status please')).blocks).toEqual([]);
+    expect((await rehydrateForPrompt(archive, 's1', '/lossless status please')).blocks).toEqual([]);
     expect((await rehydrateForPrompt(archive, 's1', 'Write a haiku about autumn leaves falling')).blocks).toEqual([]);
   });
 
-  it('truncates a record that does not fit the budget and points at /context show', async () => {
+  it('truncates a record that does not fit the budget and points at /lossless show', async () => {
     const big = record('e_99', 'zod '.repeat(2000), { metadata: { tool: 'Bash', command: 'npm ls' } });
     const archive = new MemoryArchive([...all, big]);
     const found = await rehydrateForPrompt(archive, 's1', 'The build fails with a zod type error I do not understand', { budgetChars: 1000 });
     expect(found.records.map((r) => r.id)).toEqual(['e_99']);
-    expect(found.blocks[0]).toContain('/context show e_99');
+    expect(found.blocks[0]).toContain('/lossless show e_99');
     expect(found.chars).toBeLessThanOrEqual(1000 + 200);
   });
 
@@ -165,8 +165,8 @@ describe('bestWindow / excerpting', () => {
   it('retrievedBlock marks what was cut on both sides and rehydrateForPrompt hands the model the excerpt', async () => {
     const block = retrievedBlock(deep, 1500, new Set(['fsentry']));
     expect(block).toContain('export type FsEntry');
-    expect(block).toMatch(/\[… \d+ chars before this excerpt; \/context show e_big for all of it\]/);
-    expect(block).toMatch(/\[… \d+ more chars; \/context show e_big for all of it\]/);
+    expect(block).toMatch(/\[… \d+ chars before this excerpt; \/lossless show e_big for all of it\]/);
+    expect(block).toMatch(/\[… \d+ more chars; \/lossless show e_big for all of it\]/);
 
     const archive = new MemoryArchive();
     await archive.put([deep]);

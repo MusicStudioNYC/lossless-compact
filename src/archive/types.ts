@@ -25,7 +25,7 @@ export interface ArchiveRecord {
   archivedAt: string;
   /** Which compaction wrote it (a counter or timestamp the engine chooses). */
   compactionId: string;
-  /** The action that evicted it and why, for `/context why`. */
+  /** The action that evicted it and why, for `/lossless why`. */
   action: ContextAction;
   reasons: DecisionReason[];
   /** Ids of related records: the call of a result, the result of a call, a duplicate, a dependant. */

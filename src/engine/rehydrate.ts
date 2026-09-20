@@ -86,10 +86,10 @@ export function retrievedBlock(record: ArchiveRecord, maxChars?: number, terms?:
   let content = record.content;
   if (maxChars !== undefined && record.content.length > maxChars) {
     const { start, end } = bestWindow(record.content, terms ?? new Set(), maxChars);
-    const before = start > 0 ? `[… ${start} chars before this excerpt; /context show ${record.id} for all of it]\n` : '';
+    const before = start > 0 ? `[… ${start} chars before this excerpt; /lossless show ${record.id} for all of it]\n` : '';
     const after =
       end < record.content.length
-        ? `\n[… ${record.content.length - end} more chars; /context show ${record.id} for all of it]`
+        ? `\n[… ${record.content.length - end} more chars; /lossless show ${record.id} for all of it]`
         : '';
     content = `${before}${record.content.slice(start, end)}${after}`;
   }
@@ -106,7 +106,7 @@ export function retrievedBlock(record: ArchiveRecord, maxChars?: number, terms?:
 }
 
 export const REHYDRATION_PREFACE =
-  'lossless-compact retrieved the following exact archived content because it looks relevant to this prompt. It was removed from the active context earlier and was not continuously present; /context why <id> explains why, /context restore <id> brings back the whole record.';
+  'lossless-compact retrieved the following exact archived content because it looks relevant to this prompt. It was removed from the active context earlier and was not continuously present; /lossless why <id> explains why, /lossless restore <id> brings back the whole record.';
 
 /** Picks archived records for a prompt within the budget; empty when nothing is relevant enough. */
 export async function rehydrateForPrompt(

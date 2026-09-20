@@ -33,7 +33,7 @@ import {
 /**
  * The Claude Code adapter for the context optimizer. Compaction goes through
  * `optimize` (rules, classifier, archive); the archive lives under the
- * project in `.lossless-compact/`; `/context` inspects and restores it.
+ * project in `.lossless-compact/`; `/lossless` inspects and restores it.
  */
 
 export type ClassifierChoice = 'auto' | 'jev' | 'ruleset';
@@ -374,7 +374,7 @@ export function compactionNote(details: {
   if (details.rawLogPath) {
     lines.push(`- Raw Claude Code session log, never modified by compaction: ${details.rawLogPath}`);
   }
-  lines.push('The user can also run /context why <id>, /context show <id> or /context restore <id>.');
+  lines.push('The user can also run /lossless why <id>, /lossless show <id> or /lossless restore <id>.');
   return lines.join('\n');
 }
 
@@ -552,7 +552,10 @@ export async function reviewKeepNothing(
   }
 }
 
-/* ------------------------------------------------------------- /context */
+/* ------------------------------------------------------------ /lossless */
+
+/** The plugin's slash command; every subcommand hangs off it. */
+export const COMMAND = 'lossless';
 
 export interface LastCompaction {
   at: string;
@@ -596,7 +599,7 @@ export async function statusText(
       lines.push(`  ✓ ${n} result${n === 1 ? '' : 's'} kept by rule ${rule}`);
     }
   }
-  lines.push('', 'Commands: /context list [n] · /context why <id> · /context show <id> · /context restore <id> · /context retrieve <query>');
+  lines.push('', 'Commands: /lossless list [n] · /lossless why <id> · /lossless show <id> · /lossless restore <id> · /lossless retrieve <query>');
   return lines.join('\n');
 }
 
@@ -613,7 +616,7 @@ export async function whyText(archive: ArchiveStore, id: string): Promise<string
   if (record.related.length > 0) {
     lines.push('', 'Related:', ...record.related.map((rel) => `- ${rel.relation}: ${rel.id}`));
   }
-  lines.push('', 'The original content is still stored; /context restore ' + record.id + ' brings it back.');
+  lines.push('', 'The original content is still stored; /lossless restore ' + record.id + ' brings it back.');
   return lines.join('\n');
 }
 
@@ -649,11 +652,11 @@ export async function retrieveText(archive: ArchiveStore, sessionId: string, que
         `${s.id}  ${s.kind}${s.toolName ? `/${s.toolName}` : ''}  ~${s.tokenEstimate}t  ${s.preview}`,
     ),
     '',
-    '/context restore <id> to bring one back verbatim.',
+    '/lossless restore <id> to bring one back verbatim.',
   ].join('\n');
 }
 
-/** Dispatches `/context <sub> ...`; `context` carries what the model should read. */
+/** Dispatches `/lossless <sub> ...`; `context` carries what the model should read. */
 export async function runContextCommand(
   args: string,
   deps: {
@@ -672,11 +675,11 @@ export async function runContextCommand(
     case 'list':
       return { text: await listText(deps.archive, deps.sessionId, Math.max(1, Number.parseInt(arg, 10) || 20)) };
     case 'why':
-      if (!arg) return { text: 'Usage: /context why <id>' };
+      if (!arg) return { text: 'Usage: /lossless why <id>' };
       return { text: await whyText(deps.archive, arg) };
     case 'show':
     case 'restore': {
-      if (!arg) return { text: `Usage: /context ${sub} <id>` };
+      if (!arg) return { text: `Usage: /lossless ${sub} <id>` };
       const record = await deps.archive.get(arg);
       if (!record) return { text: `No archive record ${arg}.` };
       const block = restoreBlock(record);
@@ -688,13 +691,13 @@ export async function runContextCommand(
     }
     case 'retrieve':
     case 'search':
-      if (!arg) return { text: `Usage: /context ${sub} <query>` };
+      if (!arg) return { text: `Usage: /lossless ${sub} <query>` };
       return { text: await retrieveText(deps.archive, deps.sessionId, arg) };
     default:
       return {
         text: [
           `Unknown subcommand "${sub}".`,
-          'Usage: /context [status] · list [n] · why <id> · show <id> · restore <id> · retrieve <query>',
+          'Usage: /lossless [status] · list [n] · why <id> · show <id> · restore <id> · retrieve <query>',
         ].join('\n'),
       };
   }
@@ -760,16 +763,16 @@ export const register: Register = (on: On, options: PluginOptions) => {
       }
     }
     try {
+      // Our own name: Claude Code refuses a built-in's (`/context`), and a
+      // hijacked built-in never shows in the typeahead.
       await $.command.register({
-        name: 'context',
-        description: 'Context usage, plus what lossless-compact archived: inspect, explain, restore',
-        argumentHint: '[list|why <id>|show <id>|restore <id>|retrieve <query>]',
+        name: COMMAND,
+        description: 'What lossless-compact archived: status, list, why, show, restore, retrieve',
+        argumentHint: '[status|list [n]|why <id>|show <id>|restore <id>|retrieve <query>]',
       });
     } catch (error) {
       try {
-        // Claude Code refuses the built-in name; the command.run hook below
-        // still intercepts it (seen live on 2.1.278), so nothing is lost.
-        $.ui.log(`lossless-compact: /context is the host's own here; subcommands run through the command.run hook (${error instanceof Error ? error.message : String(error)})`);
+        $.ui.log(`lossless-compact: /${COMMAND} not registered (${error instanceof Error ? error.message : String(error)})`);
       } catch {
         // ignore
       }
@@ -777,26 +780,7 @@ export const register: Register = (on: On, options: PluginOptions) => {
     return next(event);
   });
 
-  on('command.run', { command: 'context' }, async ($, event, next) => {
-    // Interactive Claude Code owns bare `/context` as a native modal. Its
-    // command result is not a text surface, so appended hook text only appeared
-    // in headless tests. Preserve the modal and use a toast as visible proof
-    // that lossless-compact is active; `/context status` prints the full report.
-    if (event.args.trim().length === 0) {
-      try {
-        const builtin = await next(event);
-        try {
-          $.ui.toast(`lossless-compact active · classifier ${classifierName}; /context status for archive details`, {
-            timeoutMs: 10_000,
-          });
-        } catch {
-          // The native context modal is still useful if its companion toast fails.
-        }
-        return builtin;
-      } catch {
-        // If the host command is unavailable, fall through to our text status.
-      }
-    }
+  on('command.run', { command: COMMAND }, async ($, event) => {
     const sessionId = await $.session.id();
     const archive = new FileArchive(engineFs($), { root: configured.archiveDir });
     const ours = await runContextCommand(event.args, {

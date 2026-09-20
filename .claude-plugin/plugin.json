@@ -1,7 +1,7 @@
 {
   "name": "lossless-compact",
   "version": "0.5.0",
-  "description": "Lossless compaction for Claude Code: nothing is summarized; everything removed is archived verbatim with provenance and restorable by id (Jev or a local ruleset). /context to inspect and restore.",
+  "description": "Lossless compaction for Claude Code: nothing is summarized; everything removed is archived verbatim with provenance and restorable by id (Jev or a local ruleset). /lossless to inspect and restore.",
   "license": "MIT",
   "userConfig": {
     "apiKey": {
