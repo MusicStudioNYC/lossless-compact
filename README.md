@@ -196,8 +196,10 @@ near-limit compaction still run through the hook there.
 /lossless retrieve <query>   lexical search over the archive
 ```
 
-It is the plugin's own command, so it is listed in the slash-command menu;
-Claude Code's `/lossless` (the usage grid) is left alone.
+It is the plugin's own command, so it is listed in the slash-command menu
+(the VS Code and Cursor extensions read that menu once at startup, so the
+plugin also ships a static `commands/lossless.md` for them; the hook answers
+it either way). Claude Code's own `/context` (the usage grid) is left alone.
 
 Archive ids appear in the stubs the model sees, e.g.
 `[lossless-compact archived e_3f9a…: 8421 more chars of this Read result (file_path=src/a.ts); /lossless restore e_3f9a… brings it back verbatim, or re-run the tool]`.
