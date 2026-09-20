@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryArchive, rankRecords } from '../src/archive/memory-store.js';
 import type { ArchiveRecord } from '../src/archive/types.js';
-import { REHYDRATION_PREFACE, rehydrateForPrompt, retrievedBlock } from '../src/engine/rehydrate.js';
+import { REHYDRATION_PREFACE, bestWindow, rehydrateForPrompt, retrievedBlock } from '../src/engine/rehydrate.js';
 
 function record(id: string, content: string, extra: Partial<ArchiveRecord> = {}): ArchiveRecord {
   return {
@@ -90,5 +90,45 @@ describe('rehydrateForPrompt', () => {
 
   it('has a preface that says the content was not continuously present', () => {
     expect(REHYDRATION_PREFACE).toMatch(/not continuously present/);
+  });
+});
+
+describe('bestWindow / excerpting', () => {
+  const filler = (n: number, tag: string) =>
+    Array.from({ length: n }, (_, i) => `${tag} line ${i}: export declare const v${i}: number;`).join('\n');
+  const deep = record(
+    'e_big',
+    [filler(300, 'head'), 'export type FsEntry = { name: string; kind: "file" | "dir"; size: number };', filler(300, 'tail')].join('\n'),
+    { toolName: 'Read', metadata: { tool: 'Read', file_path: 'types/claude-code.d.ts' } },
+  );
+
+  it('picks the line-aligned window around the query terms, not the head', () => {
+    const { start, end } = bestWindow(deep.content, new Set(['fsentry', 'kind', 'size']), 1500);
+    const slice = deep.content.slice(start, end);
+    expect(slice).toContain('export type FsEntry');
+    expect(start).toBeGreaterThan(0);
+    expect(end - start).toBeLessThanOrEqual(1500);
+    expect(deep.content[start - 1]).toBe('\n');
+    expect(deep.content[end]).toBe('\n');
+  });
+
+  it('falls back to the head without terms or hits', () => {
+    expect(bestWindow(deep.content, new Set(), 1500).start).toBe(0);
+    expect(bestWindow(deep.content, new Set(['nowhere']), 1500).start).toBe(0);
+    expect(bestWindow('short', new Set(['short']), 1500)).toEqual({ start: 0, end: 5 });
+  });
+
+  it('retrievedBlock marks what was cut on both sides and rehydrateForPrompt hands the model the excerpt', async () => {
+    const block = retrievedBlock(deep, 1500, new Set(['fsentry']));
+    expect(block).toContain('export type FsEntry');
+    expect(block).toMatch(/\[… \d+ chars before this excerpt; \/context show e_big for all of it\]/);
+    expect(block).toMatch(/\[… \d+ more chars; \/context show e_big for all of it\]/);
+
+    const archive = new MemoryArchive();
+    await archive.put([deep]);
+    const found = await rehydrateForPrompt(archive, 's1', 'what fields does the FsEntry type have?', { budgetChars: 2000 });
+    expect(found.records.map((r) => r.id)).toEqual(['e_big']);
+    expect(found.blocks[0]).toContain('export type FsEntry');
+    expect(found.chars).toBeLessThanOrEqual(2000);
   });
 });
