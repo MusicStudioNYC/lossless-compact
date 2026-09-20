@@ -420,9 +420,9 @@ describe('optimize: keepThreshold default', () => {
 });
 
 describe('optimize: no classifier and no asker', () => {
-  it('falls back to the heuristic classifier and does not throw', async () => {
+  it('falls back to the ruleset classifier and does not throw', async () => {
     const result = await optimize(transcript(), { preserveRecentMessages: 2, truncateHeadChars: 40 });
-    expect(result.report.classifier).toBe('heuristic');
+    expect(result.report.classifier).toBe('ruleset');
   });
 });
 

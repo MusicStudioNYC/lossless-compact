@@ -2,7 +2,7 @@ import { claudeCli, defaultModel } from '../src/node/evals/model.js';
 import { EVAL_MODES, markdownReport, runEval, type EvalMode } from '../src/node/evals/run.js';
 
 /**
- * npm run eval -- --dataset datasets/v1 [--modes OURS_HEURISTIC,UPSTREAM_FAST_JEV]
+ * npm run eval -- --dataset datasets/v1 [--modes OURS_RULESET,UPSTREAM_FAST_JEV]
  *   [--filter needle] [--threshold 0.15] [--margin 0.05] [--recent 6] [--record] [--out reports]
  *   [--native] [--judge native|all] [--native-keep-recent 6] [--model sonnet]
  *
@@ -27,7 +27,7 @@ function flag(name: string): boolean {
 
 const modesArg = arg('modes');
 const modes = modesArg
-  ? (modesArg.split(',').map((m) => m.trim()) as EvalMode[])
+  ? (modesArg.split(',').map((m) => (m.trim() === 'OURS_HEURISTIC' ? 'OURS_RULESET' : m.trim())) as EvalMode[])
   : [...EVAL_MODES];
 for (const mode of modes) {
   if (!EVAL_MODES.includes(mode)) {

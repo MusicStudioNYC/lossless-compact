@@ -29,7 +29,7 @@ export interface ClassifierRun {
 
 /**
  * Scores the non-pinned tool interactions. A classifier may be remote (Jev),
- * local (heuristics), or a recording of an earlier run (replay). It must not
+ * local (the ruleset), or a recording of an earlier run (replay). It must not
  * throw for a partial failure; it reports what it could not score instead and
  * throws only when it cannot run at all.
  */
@@ -38,7 +38,7 @@ export interface Classifier {
   /**
    * The keep threshold this classifier's scores are calibrated for, used when
    * the caller sets none. Jev's `noul` puts "unsure" at 0.5, so its threshold
-   * sits well below that; the heuristic centres on 0.5.
+   * sits well below that; the ruleset centres on 0.5.
    */
   readonly defaultThreshold?: number;
   score(candidates: readonly ToolCall[], context: ClassifierContext): Promise<ClassifierRun>;

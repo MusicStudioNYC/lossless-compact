@@ -3,7 +3,7 @@ import type { On, PluginOptions, Register, SessionCompactResult, SessionMessage,
 import { FileArchive, type TextFs } from '../src/archive/file-store.js';
 import type { ArchiveRecord, ArchiveStore } from '../src/archive/types.js';
 import type { ActionDecision } from '../src/core/actions.js';
-import { HeuristicClassifier } from '../src/classifiers/heuristic.js';
+import { RulesetClassifier } from '../src/classifiers/ruleset.js';
 import { JevClassifier, type JevQuestionStyle } from '../src/classifiers/jev.js';
 import type { Classifier } from '../src/classifiers/types.js';
 import { reductionRatio } from '../src/compact.js';
@@ -36,7 +36,7 @@ import {
  * project in `.lossless-compact/`; `/context` inspects and restores it.
  */
 
-export type ClassifierChoice = 'auto' | 'jev' | 'heuristic';
+export type ClassifierChoice = 'auto' | 'jev' | 'ruleset';
 
 export type LosslessCompactConfig = HookConfig & {
   classifier: ClassifierChoice;
@@ -93,9 +93,11 @@ export function resolveLosslessCompactConfig(options: PluginOptions): LosslessCo
   const config: LosslessCompactConfig = {
     ...base,
     classifier:
-      classifier === 'jev' || classifier === 'heuristic' || classifier === 'auto'
+      classifier === 'jev' || classifier === 'ruleset' || classifier === 'auto'
         ? classifier
-        : DEFAULTS.classifier,
+        : classifier === 'heuristic' // the ruleset's name up to 0.5.0
+          ? 'ruleset'
+          : DEFAULTS.classifier,
     questionStyle: style === 'upstream' || style === 'useful' ? style : DEFAULTS.questionStyle,
     archiveDir: typeof dir === 'string' && dir.length > 0 ? dir : DEFAULTS.archiveDir,
     safetyMargin: typeof margin === 'number' && Number.isFinite(margin) ? margin : DEFAULTS.safetyMargin,
@@ -164,8 +166,8 @@ export function engineFs($: {
 export function resolvedClassifierName(
   config: Pick<LosslessCompactConfig, 'classifier'>,
   apiKey: string | undefined,
-): 'jev' | 'heuristic' {
-  return config.classifier === 'auto' ? (apiKey ? 'jev' : 'heuristic') : config.classifier;
+): 'jev' | 'ruleset' {
+  return config.classifier === 'auto' ? (apiKey ? 'jev' : 'ruleset') : config.classifier;
 }
 
 /** Picks the classifier from the config and whether a key is at hand. */
@@ -180,7 +182,7 @@ export function chooseClassifier(
       questionStyle: config.questionStyle,
     });
   }
-  return new HeuristicClassifier();
+  return new RulesetClassifier();
 }
 
 export interface SessionOptimization {
@@ -740,7 +742,7 @@ export const register: Register = (on: On, options: PluginOptions) => {
 
   on('session.start', async ($, event, next) => {
     // Resolve `auto` up front so a fresh session can prove whether it will use
-    // Jev or the local heuristic before the first compaction has happened.
+    // Jev or the local ruleset before the first compaction has happened.
     try {
       classifierName = resolvedClassifierName(configured, await getApiKey($, configured));
     } catch (error) {

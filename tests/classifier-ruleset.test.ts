@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { collectToolCalls, resolveOptions, type Message } from '../src/index.js';
 import { buildLedger } from '../src/core/events.js';
-import { HeuristicClassifier } from '../src/classifiers/heuristic.js';
+import { RulesetClassifier } from '../src/classifiers/ruleset.js';
 import type { ClassifierContext } from '../src/classifiers/types.js';
 
 function message(role: Message['role'], text: string, extra: Partial<Message> = {}): Message {
@@ -32,7 +32,7 @@ function scaleFor(age: number, staleAfter = 20): number {
   return 0.5 + 0.5 * recency;
 }
 
-describe('HeuristicClassifier', () => {
+describe('RulesetClassifier', () => {
   it('reports the ClassifierRun shape and keeps every score in [0, 1]', async () => {
     const messages = [
       message('user', 'Never edit anything under src/generated. Fix the failing test.'),
@@ -45,7 +45,7 @@ describe('HeuristicClassifier', () => {
       message('assistant', 'fixing now'),
     ];
     const ctx = contextFor(messages);
-    const classifier = new HeuristicClassifier();
+    const classifier = new RulesetClassifier();
     const run = await classifier.score(ctx.calls, ctx);
 
     expect(run.scores.size).toBe(3);
@@ -55,7 +55,7 @@ describe('HeuristicClassifier', () => {
       expect(score.keepResult).toBeGreaterThanOrEqual(0);
       expect(score.keepResult).toBeLessThanOrEqual(1);
     }
-    expect(run.stats).toMatchObject({ requests: 0, stateTokens: 0, stateStage: 'heuristic', unscored: [] });
+    expect(run.stats).toMatchObject({ requests: 0, stateTokens: 0, stateStage: 'ruleset', unscored: [] });
     expect(run.stats.ms).toBeGreaterThanOrEqual(0);
   });
 
@@ -76,7 +76,7 @@ describe('HeuristicClassifier', () => {
       call('e2', 'Bash', { command: 'npm test' }),
       result('e2', 'PASS', false),
     ];
-    const classifier = new HeuristicClassifier();
+    const classifier = new RulesetClassifier();
 
     const unresolvedCtx = contextFor(unresolvedMessages);
     const unresolvedRun = await classifier.score(unresolvedCtx.calls, unresolvedCtx);
@@ -103,7 +103,7 @@ describe('HeuristicClassifier', () => {
       result('r1', 'file contents'.repeat(5)),
     ];
     const ctx = contextFor(messages);
-    const run = await new HeuristicClassifier().score(ctx.calls, ctx);
+    const run = await new RulesetClassifier().score(ctx.calls, ctx);
     const score = run.scores.get('t1')!;
     expect(score.keepResult).toBeCloseTo(0.25, 5);
     expect(score.keepCall).toBeCloseTo(0.4, 5);
@@ -119,7 +119,7 @@ describe('HeuristicClassifier', () => {
       result('s2', 'new contents'),
     ];
     const ctx = contextFor(messages);
-    const run = await new HeuristicClassifier().score(ctx.calls, ctx);
+    const run = await new RulesetClassifier().score(ctx.calls, ctx);
     const first = run.scores.get('t1')!;
     const second = run.scores.get('t2')!;
     expect(first.keepResult).toBeLessThan(second.keepResult);
@@ -138,7 +138,7 @@ describe('HeuristicClassifier', () => {
       result('d2', 'b contents'),
     ];
     const ctx = contextFor(messages);
-    const run = await new HeuristicClassifier().score(ctx.calls, ctx);
+    const run = await new RulesetClassifier().score(ctx.calls, ctx);
     const first = run.scores.get('t1')!;
     const second = run.scores.get('t2')!;
     // Each call's score is just its plain (recency-scaled) base — neither
@@ -156,7 +156,7 @@ describe('HeuristicClassifier', () => {
       result('r1', 'contents referencing src/a.ts again'),
     ];
     const ctx = contextFor(messages);
-    const run = await new HeuristicClassifier().score(ctx.calls, ctx);
+    const run = await new RulesetClassifier().score(ctx.calls, ctx);
     const score = run.scores.get('t1')!;
     expect(score.keepResult).toBeCloseTo(0.25 + 0.2, 5);
   });
@@ -168,7 +168,7 @@ describe('HeuristicClassifier', () => {
       result('w1', 'x'.repeat(25_000)),
     ];
     const ctx = contextFor(messages);
-    const run = await new HeuristicClassifier().score(ctx.calls, ctx);
+    const run = await new RulesetClassifier().score(ctx.calls, ctx);
     const score = run.scores.get('t1')!;
     expect(score.keepResult).toBeCloseTo(0.7 - 0.1, 5);
   });
@@ -180,7 +180,7 @@ describe('HeuristicClassifier', () => {
     ]).flat();
     messages.unshift(message('user', 'start'));
     const ctx = contextFor(messages);
-    const run = await new HeuristicClassifier({ staleAfterMessages: 5 }).score(ctx.calls, ctx);
+    const run = await new RulesetClassifier({ staleAfterMessages: 5 }).score(ctx.calls, ctx);
     // the oldest calls are far past staleAfterMessages, so recency collapses to 0
     const oldest = run.scores.get('t1')!;
     expect(oldest.keepResult).toBeGreaterThanOrEqual(0.05);
@@ -195,7 +195,7 @@ describe('HeuristicClassifier', () => {
       result('b2', 'ok'),
     ];
     const ctx = contextFor(messages);
-    const run = await new HeuristicClassifier().score(ctx.calls, ctx);
+    const run = await new RulesetClassifier().score(ctx.calls, ctx);
     expect(run.scores.get('t1')!.keepResult).toBeGreaterThan(run.scores.get('t2')!.keepResult);
     expect(run.scores.get('t2')!.keepResult).toBeCloseTo(0.2, 5);
   });

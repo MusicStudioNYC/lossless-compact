@@ -31,7 +31,7 @@ interface Row {
 
 const ROWS: readonly Row[] = [
   { mode: 'OURS_JEV', label: 'lossless-compact + Jev', sub: 'archives, keepThreshold 0.35', timed: 'engine + live Jev requests', ours: true },
-  { mode: 'OURS_HEURISTIC', label: 'lossless-compact, local ruleset', sub: 'no model, no key, no network', timed: 'engine only, no network', ours: true },
+  { mode: 'OURS_RULESET', label: 'lossless-compact, local ruleset', sub: 'no model, no key, no network', timed: 'engine only, no network', ours: true },
   { mode: 'CLAUDE_NATIVE_COMPACTION', label: 'Claude Code /compact', sub: 'summary written by Sonnet', timed: 'one full-context model call', ours: false },
   { mode: 'UPSTREAM_FAST_JEV', label: 'upstream fast-jev', sub: 'deletes, keepThreshold 0.5', timed: 'engine + live Jev request', ours: false },
 ];
@@ -205,12 +205,12 @@ function latencySvg(report: EvalReport, live: EvalReport | undefined, t: Theme):
   }
   const summary = timings.get('CLAUDE_NATIVE_COMPACTION')!.mean;
   const jev = timings.get('OURS_JEV')!.mean;
-  const heuristic = timings.get('OURS_HEURISTIC')!.mean;
+  const ruleset = timings.get('OURS_RULESET')!.mean;
 
   const title = 'Time per compaction';
   const parts = [
     text(LEFT, 24, title, 'title'),
-    text(LEFT, 43, `same cases, log scale · lossless-compact + Jev is ${fmtTimes(summary / jev)} faster than a summary, the local ruleset ${fmtTimes(summary / heuristic)}`, 'sub'),
+    text(LEFT, 43, `same cases, log scale · lossless-compact + Jev is ${fmtTimes(summary / jev)} faster than a summary, the local ruleset ${fmtTimes(summary / ruleset)}`, 'sub'),
   ];
   for (const ms of decades) {
     parts.push(
@@ -234,8 +234,10 @@ function latencySvg(report: EvalReport, live: EvalReport | undefined, t: Theme):
   return svg(t, h, title, parts.join('\n'));
 }
 
+/** Reads a report; reports written by 0.5.0 and earlier call the ruleset mode OURS_HEURISTIC. */
 async function loadReport(dir: string): Promise<EvalReport> {
-  return JSON.parse(await readFile(join(dir, 'report.json'), 'utf8')) as EvalReport;
+  const text = await readFile(join(dir, 'report.json'), 'utf8');
+  return JSON.parse(text.replaceAll('"OURS_HEURISTIC"', '"OURS_RULESET"')) as EvalReport;
 }
 
 /** Newest report under `root` that `accept`s, by directory name (an ISO timestamp). */

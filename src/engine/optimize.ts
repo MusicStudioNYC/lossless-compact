@@ -1,6 +1,6 @@
 import { MemoryArchive } from '../archive/memory-store.js';
 import type { ArchiveRecord, ArchiveStore } from '../archive/types.js';
-import { HeuristicClassifier } from '../classifiers/heuristic.js';
+import { RulesetClassifier } from '../classifiers/ruleset.js';
 import { JevClassifier } from '../classifiers/jev.js';
 import type { Classifier, ClassifierRun } from '../classifiers/types.js';
 import { messageChars, resolveOptions } from '../compact.js';
@@ -39,7 +39,7 @@ export interface OptimizeOptions extends CompactOptions {
   compactionId?: string;
   /** Where evicted content goes. Default a fresh in-memory archive (returned in the result). */
   archive?: ArchiveStore;
-  /** Scores the candidates. Default: Jev over `asker` when given, otherwise the local heuristic. */
+  /** Scores the candidates. Default: Jev over `asker` when given, otherwise the local ruleset. */
   classifier?: Classifier;
   asker?: JevAsker;
   rules?: Partial<RuleOptions>;
@@ -454,7 +454,7 @@ export async function optimize(
   const started = Date.now();
   const now = options.now ?? (() => new Date());
   const classifier: Classifier =
-    options.classifier ?? (options.asker ? new JevClassifier(options.asker) : new HeuristicClassifier());
+    options.classifier ?? (options.asker ? new JevClassifier(options.asker) : new RulesetClassifier());
   const resolved: ResolvedCompactOptions = resolveOptions({
     ...options,
     keepThreshold: options.keepThreshold ?? classifier.defaultThreshold,

@@ -3,7 +3,7 @@ import type { ClassifierScores } from '../core/actions.js';
 import type { Message, ToolCall } from '../types.js';
 import type { Classifier, ClassifierContext, ClassifierRun } from './types.js';
 
-export interface HeuristicOptions {
+export interface RulesetOptions {
   /** Messages after which a result is considered stale. Default 20. */
   staleAfterMessages?: number;
   /** Tools whose results are cheap to re-run. Default ['Read','Grep','Glob','LS']. */
@@ -112,26 +112,26 @@ function mentionsRecentPath(resultText: string, messages: readonly Message[]): b
 }
 
 /**
- * The no-network degraded-mode classifier: deterministic signals only (age,
+ * The no-network degraded-mode classifier, a hand-written ruleset: deterministic signals only (age,
  * tool type, error status, duplication, size), so it stays available when
  * Jev is unavailable or when a sensitive repo's local policy mode forbids
  * sending anything off the machine. Fast and O(n) — no state is built and no
  * request is made.
  */
-export const HEURISTIC_DEFAULT_THRESHOLD = 0.4;
+export const RULESET_DEFAULT_THRESHOLD = 0.4;
 
-export class HeuristicClassifier implements Classifier {
-  readonly name = 'heuristic';
+export class RulesetClassifier implements Classifier {
+  readonly name = 'ruleset';
   /**
    * From the 2026-09-20 sweep (docs/evals.md): on 12 real sessions 0.3 → 19 %
    * reduction, 0.4 → 49 %, 0.5 → 67 %; labelled false drops did not move with
    * the threshold. The middle setting keeps more in degraded mode.
    */
-  readonly defaultThreshold = HEURISTIC_DEFAULT_THRESHOLD;
+  readonly defaultThreshold = RULESET_DEFAULT_THRESHOLD;
   private readonly staleAfterMessages: number;
   private readonly rerunnableTools: readonly string[];
 
-  constructor(options: HeuristicOptions = {}) {
+  constructor(options: RulesetOptions = {}) {
     this.staleAfterMessages = Math.max(1, options.staleAfterMessages ?? 20);
     this.rerunnableTools = options.rerunnableTools ?? ['Read', 'Grep', 'Glob', 'LS'];
   }
@@ -182,7 +182,7 @@ export class HeuristicClassifier implements Classifier {
       stats: {
         requests: 0,
         stateTokens: 0,
-        stateStage: 'heuristic',
+        stateStage: 'ruleset',
         ms: Date.now() - started,
         unscored: [],
       },

@@ -72,8 +72,7 @@ score a summary, and ~6 % noisy). Method and full tables:
   byte: a compacted transcript is still greppable, diffable and quotable.
 - **The local ruleset is the no-key fallback.** A hand-written, deterministic
   set of rules — which tools are cheap to re-run, what reads like an error,
-  how old a result is — with no model and no network. It is called
-  `heuristic` in settings and in `/context status`. Same reduction; it
+  how old a result is — with no model and no network. Same reduction; it
   misses three of the six needles that nothing later refers to — the semantic
   call Jev is for — but archives them, so `/context restore` or prompt
   retrieval brings them back.
@@ -132,7 +131,7 @@ not exist before that.
    ```
 
 3. Start a new session and type `/context status`. The text report should
-   start with `lossless-compact` and name `jev` (with a key) or `heuristic` (without
+   start with `lossless-compact` and name `jev` (with a key) or `ruleset` (without
    one). A bare `/context` remains Claude Code's native usage grid and shows a
    short `lossless-compact active` toast; the host does not let plugins add rows to
    that modal.
@@ -153,7 +152,7 @@ trigger, off by default), and every compaction — yours, Claude Code's own
 near the limit, or the plugin's — goes through the same hook, so none of
 them summarize. `/context status` shows the plugin's usage and archive state.
 
-Without a `TYPESAFE_API_KEY` the plugin runs the local ruleset (`heuristic`) —
+Without a `TYPESAFE_API_KEY` the plugin runs the local ruleset —
 no model, no network, ~200 ms on a 300k-token transcript. With a key (env var, settings
 `env`, or the plugin's `apiKey` option) it uses Jev. `/compact` and
 auto-compaction both go through it; the compaction toast reads `lossless-compact kept N/M
@@ -196,8 +195,8 @@ Archive ids appear in the stubs the model sees, e.g.
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `classifier` | `auto` | `auto` = Jev when a key is available, else `heuristic`; or force `jev` / `heuristic` |
-| `keepThreshold` | classifier's own | Jev 0.35, heuristic 0.4 (see [docs/evals.md](docs/evals.md)) |
+| `classifier` | `auto` | `auto` = Jev when a key is available, else `ruleset`; or force `jev` / `ruleset` |
+| `keepThreshold` | classifier's own | Jev 0.35, ruleset 0.4 (see [docs/evals.md](docs/evals.md)) |
 | `questionStyle` | `useful` | Jev wording: `useful` (with criteria) or `upstream` |
 | `safetyMargin` | 0 | Scores this far below the threshold still keep |
 | `preserveRecentMessages` | 6 | Newest messages never touched |
@@ -220,7 +219,7 @@ Add `.lossless-compact/` to the project's `.gitignore`.
 ## Library
 
 ```ts
-import { optimize, FileArchive, JevClient, JevClassifier, HeuristicClassifier } from 'fast-jev-compaction';
+import { optimize, FileArchive, JevClient, JevClassifier, RulesetClassifier } from 'fast-jev-compaction';
 import { nodeFs } from 'fast-jev-compaction/dist/node/fs.js';
 
 const result = await optimize(messages, {
@@ -228,7 +227,7 @@ const result = await optimize(messages, {
   archive: new FileArchive(nodeFs, { root: '.lossless-compact' }),
   classifier: process.env.TYPESAFE_API_KEY
     ? new JevClassifier(new JevClient())
-    : new HeuristicClassifier(),
+    : new RulesetClassifier(),
 });
 result.messages;   // the compacted transcript (untouched messages are the same objects)
 result.actions;    // one ActionDecision per tool interaction, with reasons and archive ids

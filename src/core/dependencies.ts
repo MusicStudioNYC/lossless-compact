@@ -130,7 +130,7 @@ function toolIdTokensIn(text: string): Set<string> {
  * Extracts every anchor class from a piece of text: file paths (via
  * `pathsIn`), code-shaped symbols, error signatures and long distinctive
  * lines ("quotes"). Used to index tool results and to scan later events for
- * references to them; exported for tests and for the heuristic classifier.
+ * references to them; exported for tests and for the ruleset classifier.
  */
 export function anchorsOf(text: string, options: AnchorOptions = {}): Anchors {
   const minSymbolLength = options.minSymbolLength ?? DEFAULT_MIN_SYMBOL_LENGTH;

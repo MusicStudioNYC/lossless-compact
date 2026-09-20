@@ -47,7 +47,8 @@ describe('resolveLosslessCompactConfig', () => {
   it('validates the classifier enum and falls back to auto for anything else', () => {
     expect(resolveLosslessCompactConfig({ classifier: 'bogus' }).classifier).toBe('auto');
     expect(resolveLosslessCompactConfig({ classifier: 'jev' }).classifier).toBe('jev');
-    expect(resolveLosslessCompactConfig({ classifier: 'heuristic' }).classifier).toBe('heuristic');
+    expect(resolveLosslessCompactConfig({ classifier: 'ruleset' }).classifier).toBe('ruleset');
+    expect(resolveLosslessCompactConfig({ classifier: 'heuristic' }).classifier).toBe('ruleset');
     expect(resolveLosslessCompactConfig({ classifier: 'auto' }).classifier).toBe('auto');
   });
 
@@ -88,12 +89,12 @@ describe('resolveLosslessCompactConfig', () => {
 describe('resolvedClassifierName', () => {
   it('turns auto into the classifier a fresh session will actually use', () => {
     expect(resolvedClassifierName({ classifier: 'auto' }, 'apikey_test')).toBe('jev');
-    expect(resolvedClassifierName({ classifier: 'auto' }, undefined)).toBe('heuristic');
+    expect(resolvedClassifierName({ classifier: 'auto' }, undefined)).toBe('ruleset');
   });
 
   it('preserves an explicit classifier choice', () => {
     expect(resolvedClassifierName({ classifier: 'jev' }, undefined)).toBe('jev');
-    expect(resolvedClassifierName({ classifier: 'heuristic' }, 'apikey_test')).toBe('heuristic');
+    expect(resolvedClassifierName({ classifier: 'ruleset' }, 'apikey_test')).toBe('ruleset');
   });
 });
 
@@ -195,7 +196,7 @@ describe('runContextCommand', () => {
       messages: async () => built.messages,
       archive,
       last: async () => undefined,
-      classifier: 'heuristic',
+      classifier: 'ruleset',
     };
   });
 
@@ -275,9 +276,9 @@ describe('chooseClassifier', () => {
   const baseConfig = resolveLosslessCompactConfig({});
   const fetchFn = async () => ({ status: 200, ok: true, text: '{"answers":{}}' });
 
-  it("'auto' without a key falls back to heuristic", () => {
+  it("'auto' without a key falls back to the ruleset", () => {
     const classifier = chooseClassifier({ ...baseConfig, classifier: 'auto' }, fetchFn, undefined);
-    expect(classifier.name).toBe('heuristic');
+    expect(classifier.name).toBe('ruleset');
   });
 
   it("'auto' with a key uses jev", () => {
@@ -291,9 +292,9 @@ describe('chooseClassifier', () => {
     );
   });
 
-  it("'heuristic' always uses the heuristic classifier, key or not", () => {
-    expect(chooseClassifier({ ...baseConfig, classifier: 'heuristic' }, fetchFn, undefined).name).toBe('heuristic');
-    expect(chooseClassifier({ ...baseConfig, classifier: 'heuristic' }, fetchFn, 'key-123').name).toBe('heuristic');
+  it("'ruleset' always uses the ruleset classifier, key or not", () => {
+    expect(chooseClassifier({ ...baseConfig, classifier: 'ruleset' }, fetchFn, undefined).name).toBe('ruleset');
+    expect(chooseClassifier({ ...baseConfig, classifier: 'ruleset' }, fetchFn, 'key-123').name).toBe('ruleset');
   });
 });
 

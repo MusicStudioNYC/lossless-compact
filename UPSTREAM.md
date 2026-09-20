@@ -59,7 +59,7 @@ before the fork), 30 open. The open ones that matter, and what we did:
 | #35, #36 | Auto-compact lock taken after an `await`; a throwing `ui.log` breaks the hook. | Lock before the first `await`; UI calls wrapped. |
 | #53 | Zero kept among scored calls reads as "94% reduction" instead of a miscalibrated classifier. | Hook falls back to the built-in summary when ≥ 5 scored results were all evicted. |
 | #37 | `npm pack` can ship without `dist/`. | `prepack` builds. |
-| #54 | No public path to a TypeSafe key. | The heuristic classifier makes the plugin work with no key at all. |
+| #54 | No public path to a TypeSafe key. | The local ruleset classifier makes the plugin work with no key at all. |
 | #33, #34, #38, #39, #32 | Unbounded concurrency, no request timeout, question headroom, `/compact` instructions ignored, pending calls invisible in state. | **Open** — see the follow-up ledger in the handoff. |
 
 TypeSafe facts that changed defaults: 64k tokens per request, 32k for state +

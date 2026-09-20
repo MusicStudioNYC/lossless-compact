@@ -1,5 +1,5 @@
 /**
- * Retrieval check over a dataset: compact every case with the heuristic
+ * Retrieval check over a dataset: compact every case with the ruleset
  * classifier (deterministic, no key), then ask the archive with the case's
  * final user prompt and see which evicted `active_or_archive` probes come
  * back through `rehydrateForPrompt`, and how much was retrieved when no
@@ -10,7 +10,7 @@
  *   npx tsx scripts/retrieval-check.ts --dataset datasets/v1 [--budget 6000]
  */
 import { MemoryArchive } from '../src/archive/memory-store.js';
-import { HeuristicClassifier } from '../src/classifiers/heuristic.js';
+import { RulesetClassifier } from '../src/classifiers/ruleset.js';
 import { optimize } from '../src/engine/optimize.js';
 import { rehydrateForPrompt } from '../src/engine/rehydrate.js';
 import { listCases } from '../src/node/evals/dataset.js';
@@ -41,7 +41,7 @@ console.log(`| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |`);
 for (const item of cases) {
   const archive = new MemoryArchive();
   const result = await optimize(item.transcript, {
-    classifier: new HeuristicClassifier(),
+    classifier: new RulesetClassifier(),
     archive,
     sessionId: 'check',
     compactionId: 'check',

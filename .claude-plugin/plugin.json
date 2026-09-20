@@ -1,7 +1,7 @@
 {
   "name": "lossless-compact",
   "version": "0.5.0",
-  "description": "Lossless compaction for Claude Code: nothing is summarized; everything removed is archived verbatim with provenance and restorable by id (Jev or local heuristics). /context to inspect and restore.",
+  "description": "Lossless compaction for Claude Code: nothing is summarized; everything removed is archived verbatim with provenance and restorable by id (Jev or a local ruleset). /context to inspect and restore.",
   "license": "MIT",
   "userConfig": {
     "apiKey": {
@@ -13,17 +13,17 @@
     "keepThreshold": {
       "type": "number",
       "title": "Keep threshold",
-      "description": "Minimum keep probability for a tool result or call to stay. Leave unset to use the classifier's own calibration (Jev 0.35, heuristic 0.4)."
+      "description": "Minimum keep probability for a tool result or call to stay. Leave unset to use the classifier's own calibration (Jev 0.35, ruleset 0.4)."
     },
     "classifier": {
       "type": "string",
       "title": "Classifier",
-      "description": "auto = Jev when a TypeSafe key is available, otherwise local heuristics (no network).",
+      "description": "auto = Jev when a TypeSafe key is available, otherwise the local ruleset (no model, no network). `heuristic` is accepted as an older spelling.",
       "default": "auto",
       "options": [
         "auto",
         "jev",
-        "heuristic"
+        "ruleset"
       ]
     },
     "questionStyle": {

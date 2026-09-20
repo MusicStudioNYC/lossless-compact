@@ -8,7 +8,7 @@ still well-formed.
 ```sh
 npm run adversarial                       # regenerate datasets/v1/adversarial (deterministic)
 npm run eval -- --dataset datasets/v1     # all modes, report under reports/<timestamp>/
-npm run eval -- --modes OURS_HEURISTIC,NO_COMPACTION --filter needle
+npm run eval -- --modes OURS_RULESET,NO_COMPACTION --filter needle
 npm run eval -- --threshold 0.15 --margin 0.05 --recent 6
 TYPESAFE_API_KEY=… npm run eval -- --record   # ask Jev for cassette misses and save cassettes
 npm run charts                            # redraw the README figures (docs/img/) from the newest reports
@@ -21,7 +21,7 @@ npm run charts                            # redraw the README figures (docs/img/
 | `NO_COMPACTION` | identity | – |
 | `CLAUDE_NATIVE_COMPACTION` | a Claude-Code-style summary (`claude -p --model sonnet`, or the API) replaces the history | `--native`; a `claude` binary or `ANTHROPIC_API_KEY` |
 | `UPSTREAM_FAST_JEV` | upstream `compact()` at threshold 0.5 | cassette or key |
-| `OURS_HEURISTIC` | `optimize()` with the offline heuristic classifier | – |
+| `OURS_RULESET` | `optimize()` with the offline ruleset classifier | – |
 | `OURS_JEV` | `optimize()` with Jev, `useful` wording, threshold 0.35 | cassette or key |
 | `OURS_JEV_UPSTREAM_WORDING` | `optimize()` with Jev, upstream wording | cassette or key |
 
@@ -97,7 +97,7 @@ All modes on the adversarial set, each classifier at its own default:
 | NO_COMPACTION | 0 % | 0/6 | 5/5 · 27/27 | 0 | 0 | 0 |
 | UPSTREAM_FAST_JEV (threshold 0.5, upstream wording, deletes) | **97.0 %** | **4/6** | 5/5 · **3/27** | 0 | 305 | 8 |
 | OURS_JEV (`useful` wording, sketches, archive) | see sweep | **0/6** | 5/5 · 27/27 | 0 | ~500 | 15 |
-| OURS_HEURISTIC (0.4) | 93.0 % | 3/6 | 5/5 · 27/27 | 0 | 36 | 0 |
+| OURS_RULESET (0.4) | 93.0 % | 3/6 | 5/5 · 27/27 | 0 | 36 | 0 |
 
 Upstream's headline reduction is deletion: two thirds of the labelled
 must-keeps and 24 of 27 probes are gone for good. Ours never loses a probe
@@ -106,7 +106,7 @@ must-keeps and 24 of 27 probes are gone for good. Ours never loses a probe
 Since the live smoke test (2026-09-20) a removed call leaves a one-line marker
 naming its archive id even when its message had no narration (Claude Code's
 usual shape), so the same cassettes now give 86.5 % adversarial / 48.9 % real
-for Jev and 88.1 % / 46.4 % for the heuristic; the ids the model can restore
+for Jev and 88.1 % / 46.4 % for the ruleset; the ids the model can restore
 from are the cost. Fidelity columns are unchanged. The tables below predate
 the markers.
 
@@ -146,7 +146,7 @@ summary quoted the case's constraint sentence word for word (5/5 active).
 | NO_COMPACTION | 100 % | 0/6 | 0/6 | 27/27 | 30/32 | 262/279 | yes | – |
 | UPSTREAM_FAST_JEV | 3 % | 4/6 | 2/6 | 3/27 | 9/32 | 73/279 | yes | 6 ms + Jev |
 | OURS_JEV (0.35) | 9 % | 0/6 | 0/6 | 27/27 | 11/32 (+27/27 archived) | 14/279 (5 %) | yes | 47 ms + ~1 s Jev, ~1¢ |
-| OURS_HEURISTIC (0.4) | 7 % | 3/6 | 1/6 | 27/27 | 10/32 | 45/279 | yes | 40 ms, $0 |
+| OURS_RULESET (0.4) | 7 % | 3/6 | 1/6 | 27/27 | 10/32 | 45/279 | yes | 40 ms, $0 |
 | CLAUDE_NATIVE_COMPACTION (summary) | 10 % | 6/6 (nothing verbatim survives) | 0/6 | 14/27 | 16/32 | 80/279 (29 %) | no — 8/8 rewritten | 82 s, full-context model call |
 
 Reading: on the six needles the summary matched us semantically (Sonnet saw
@@ -184,7 +184,7 @@ that matched. After the fixes:
 | Token estimator | the hook's chars/4 estimate runs ~1.7× under the host's count on Read-heavy transcripts (line-number prefixes, per-block overhead); `compactAtTokens` uses the host's count, so only the log lines are affected |
 
 Retrieval check (`npx tsx scripts/retrieval-check.ts --dataset datasets/v1`:
-compact with the heuristic, then ask the archive with each case's final
+compact with the ruleset, then ask the archive with each case's final
 prompt): 2 of the 3 evicted needles come back (`54329` for "can't reach
 Postgres", `UNMET PEER DEPENDENCY zod` for "zod type error"; `MAX_UPLOAD_MB`
 for "uploads of 30MB failing" is beyond lexical retrieval), no junk on the
@@ -192,7 +192,7 @@ five cases with nothing evicted. The ranker now weights terms the user spelled
 like code three times, collapses records archived twice, and returns nothing
 for a prompt made of prose alone.
 
-## Heuristic results (2026-09-20, no Jev)
+## Ruleset results (2026-09-20, no Jev)
 
 Adversarial set (8 cases) and 12 real sessions (98k–330k tokens each, the
 post-compaction tails of long `aigalaxy.app` sessions), threshold sweep:

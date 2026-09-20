@@ -16,7 +16,7 @@ host transcript (Claude Code SessionMessage[])
         ├─ findConstraints         (explicit user instructions; never evicted, feed memory)
         ├─ protectionsFor          (unresolved errors, referenced results, current files, non-reproducible tools)
         ├─ findDuplicates          (identical tool+input+result retained later)
-        ├─ Classifier.score        (Jev | heuristic | replay) over a redacted, sketched state
+        ├─ Classifier.score        (Jev | ruleset | replay) over a redacted, sketched state
         ├─ decideInteraction       (rules → redundancy → scores → ContextAction, with reasons)
         ├─ applyActions            (rebuild transcript; stubs name archive ids; #65 markers)
         └─ archive.put             (every evicted unit, verbatim, with provenance)
@@ -28,7 +28,7 @@ host transcript (Claude Code SessionMessage[])
 | --- | --- | --- |
 | `src/*.ts` (upstream) | anywhere | Kept as-is so upstream patches merge; the Jev pruner is now one classifier. |
 | `src/core/` | anywhere | hash, events/ledger, action taxonomy, rules, dependencies, sketches, redaction, policy. **No Node imports.** |
-| `src/classifiers/` | anywhere | `Classifier` interface; `jev` (upstream protocol + salvage), `heuristic` (a hand-written, deterministic ruleset; offline, no model), `replay` (cassettes). |
+| `src/classifiers/` | anywhere | `Classifier` interface; `jev` (upstream protocol + salvage), `ruleset` (hand-written, deterministic; offline, no model), `replay` (cassettes). |
 | `src/archive/` | anywhere | `ArchiveStore` contract, `MemoryArchive`, `FileArchive` over a 4-method `TextFs`. |
 | `src/engine/` | anywhere | `optimize()` — the orchestration. |
 | `src/node/` | Node only | Claude Code JSONL transcript loader, `nodeFs`, eval runner. The only place `node:*` is imported. |
@@ -112,5 +112,5 @@ reranker are the planned next step (plan §14).
 
 Datasets are directories of `transcript.json` (`Message[]`) plus optional
 `labels.json` and `cassette.json`. Modes: `NO_COMPACTION`, `UPSTREAM_FAST_JEV`,
-`OURS_HEURISTIC`, `OURS_JEV`, `CLAUDE_NATIVE_COMPACTION` (needs a model; opt-in).
+`OURS_RULESET`, `OURS_JEV`, `CLAUDE_NATIVE_COMPACTION` (needs a model; opt-in).
 Reports are JSON plus a markdown table.

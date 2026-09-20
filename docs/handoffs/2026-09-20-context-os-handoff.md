@@ -14,7 +14,7 @@
 ## What is done (with paths)
 
 - Fork bookkeeping: `UPSTREAM.md` (fork SHA `e3f262a`, upstream issue survey, divergence table), remote `upstream`.
-- Core engine, sandbox-safe (no `node:*`): `src/core/{hash,events,actions,rules,dependencies,sketch,redact,policy}.ts`, `src/classifiers/{types,jev,heuristic,replay}.ts`, `src/archive/{types,memory-store,file-store}.ts`, `src/engine/{optimize,rehydrate}.ts`. Public exports in `src/index.ts`.
+- Core engine, sandbox-safe (no `node:*`): `src/core/{hash,events,actions,rules,dependencies,sketch,redact,policy}.ts`, `src/classifiers/{types,jev,ruleset,replay}.ts`, `src/archive/{types,memory-store,file-store}.ts`, `src/engine/{optimize,rehydrate}.ts`. Public exports in `src/index.ts`.
 - Claude Code plugin: `hooks/lossless-compact.ts` (registered in `hooks/hooks.json`; upstream `hooks/fast-jev.ts` kept as a helper library), `.claude-plugin/plugin.json` (renamed `lossless-compact`, new options), `/context` command, `prompt.submit` retrieval.
 - Node tier: `src/node/transcripts.ts` (Claude Code JSONL → `Message[]`, usage/cache data, compaction boundaries), `src/node/fs.ts`, `src/node/evals/{dataset,scorers,run}.ts`, `scripts/{eval,capture-sessions,make-adversarial}.ts`, npm scripts `eval`, `capture`, `adversarial`, `prepack`.
 - Datasets: `datasets/v1/adversarial/` (8 gold scenarios, committed, deterministic); `datasets/real/` (12 captured sessions, **git-ignored**, on this machine only).
@@ -24,7 +24,7 @@
 ## Numbers so far (docs/evals.md has the tables)
 
 - Jev (cassettes recorded and committed for `datasets/v1`; real-session cassettes are in the git-ignored `datasets/real/`): upstream at its default deletes 4/6 must-keeps and 24/27 probes for 97 %; ours drops 0/6 and loses nothing up to threshold 0.45, first false drop at 0.50. Default set to **0.35**: 91 % adversarial, 52 % real, ~9 requests / 1.2 s per real session.
-- Heuristic (no key): 93 % / 49 % at 0.4, 3/6 semantic needles evicted (2 come back through prompt retrieval), ~40–190 ms.
+- Ruleset (no key): 93 % / 49 % at 0.4, 3/6 semantic needles evicted (2 come back through prompt retrieval), ~40–190 ms.
 - Zero structural/verbatim failures anywhere.
 
 ## Also done late in the chat (owner's requests)
@@ -52,7 +52,7 @@ The owner ran `/compact` in a VS Code chat tab on a kosher.chat session and it "
 ## What is left, in order
 
 1. **Interactive verification of auto-compaction** in the VS Code extension: open Claude Code 2.1.278 in this repo with the plugin loaded, work past 120k tokens, expect the toast `lossless-compact kept N/M messages, archived K units, no summary (…)` without typing `/compact`; then a prompt naming something archived, expect the model to cite a `retrieved_context` block; then `/context restore <id>` followed by a question answerable only from it.
-2. **Label ~5 real sessions, model-assisted** (owner chose this): a subagent reads `datasets/real/<case>/transcript.json`, writes `labels.json` (must_keep / nice_to_keep / safe_to_truncate / safe_to_drop per `tool_use_id`, plus probes), the owner spot-checks; then `npm run eval -- --dataset datasets/real --modes OURS_JEV,OURS_HEURISTIC,UPSTREAM_FAST_JEV` gives the first real false-drop rate (Jev cassettes for the 12 real cases already exist). Re-check the 0.35 default against those labels.
+2. **Label ~5 real sessions, model-assisted** (owner chose this): a subagent reads `datasets/real/<case>/transcript.json`, writes `labels.json` (must_keep / nice_to_keep / safe_to_truncate / safe_to_drop per `tool_use_id`, plus probes), the owner spot-checks; then `npm run eval -- --dataset datasets/real --modes OURS_JEV,OURS_RULESET,UPSTREAM_FAST_JEV` gives the first real false-drop rate (Jev cassettes for the 12 real cases already exist). Re-check the 0.35 default against those labels.
 3. **Per-project settings** (option B above, ~80 lines in the hook + tests) — owner confirmed B.
 4. **Windowed classification** (upstream #52): when `fitState` reaches the `old messages collapsed` stage or worse, Jev is asked about calls it cannot see. Score in windows (build the state per batch with that batch's messages in full). `JevClassifier.score` is the place.
 5. **Phase 3 durable memory**: `EXTRACT_MEMORY_AND_ARCHIVE` exists in the taxonomy but nothing produces memories yet. Plan §13: categories, provenance (`source_ids` = event ids), `active/superseded/disputed`. Extraction channel: `$.model.fork({prompt})` in the hook (cheap, shares the prompt cache) or `$.model.complete`; store under `.lossless-compact/memory/` via `FileArchive`-style sharding; surface via `prompt.section` (cached) or `prompt.submit` context. `findConstraints` already yields USER_CONSTRAINT candidates.
@@ -69,7 +69,7 @@ The owner ran `/compact` in a VS Code chat tab on a kosher.chat session and it "
 - **Sandbox-safe core / Node tier split**: the hook runtime has no Node at all (`types/claude-code.d.ts` header; `$.fs`, `$.store`, `$.http.fetch` only). Anything the hook imports must be pure TS. `npm run typecheck:hooks` enforces it (types: [], lib es2023).
 - **FileArchive over `$.fs`, sharded JSON, not SQLite**: no `node:sqlite` in the sandbox; `$.fs` is whole-file ≤ 4 MiB; `$.store` is a 4 MiB global KV. SQLite remains an option for the Node CLI only.
 - **Jev threshold 0.15 + "useful" wording**: upstream #26/#52/#56 show 0.5 with upstream wording keeps nothing (0/256 results > 0.3 on 16 real sessions); #55 measured 0.15 + criteria. Provisional until our cassettes exist. Upstream wording kept as `questionStyle: 'upstream'` for A/B.
-- **Heuristic threshold 0.4**: sweep in docs/evals.md; false drops did not move with the threshold, reduction did (19/49/67 %).
+- **Ruleset threshold 0.4**: sweep in docs/evals.md; false drops did not move with the threshold, reduction did (19/49/67 %).
 - **Strong vs weak references**: hard-protecting every result a later assistant message mentioned a path from protected 120/326 candidates on one real session. Now quotes/error lines/tool ids/user mentions protect; paths/symbols add +0.2.
 - **Removed calls leave a marker in the narrating assistant message** (upstream #65) rather than keeping the call: the marker is additive, names the archive ids, and is the only edit ever made to text. Rejected: replacing the tool input with a stub (confuses the model).
 - **Partial batch salvage** (#58) over fail-closed (#44): unscored calls are kept, so salvage cannot delete anything.
@@ -110,8 +110,8 @@ The owner ran `/compact` in a VS Code chat tab on a kosher.chat session and it "
 ## How to test this
 
 1. `npm install && npm run typecheck && npm test` → 0 errors, 244 passed.
-2. `npm run adversarial && npm run eval -- --dataset datasets/v1 --modes NO_COMPACTION,OURS_HEURISTIC` → a table with 0 structure failures, 5/5 probes active, 27/27 recoverable, ~93 % mean reduction.
-3. `npm run capture -- --limit 3 --min-bytes 1500000 && npm run eval -- --dataset datasets/real --modes OURS_HEURISTIC` → ~50 % reduction, ~200 ms per case.
+2. `npm run adversarial && npm run eval -- --dataset datasets/v1 --modes NO_COMPACTION,OURS_RULESET` → a table with 0 structure failures, 5/5 probes active, 27/27 recoverable, ~93 % mean reduction.
+3. `npm run capture -- --limit 3 --min-bytes 1500000 && npm run eval -- --dataset datasets/real --modes OURS_RULESET` → ~50 % reduction, ~200 ms per case.
 4. With Claude Code ≥ 2.1.274: `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir .`, work until `/compact`, then `/context`, `/context list`, `/context why <id>`, `/context restore <id>`; expect `.lossless-compact/archive/<session>/index.json` to exist and the toast `lossless-compact kept N/M messages, archived K units`.
 
 ## Naming decision (2026-09-20)
@@ -120,7 +120,7 @@ The owner ran `/compact` in a VS Code chat tab on a kosher.chat session and it "
 
 - **Why rename at all:** GitHub already had `Arkya-AI/claude-context-os` (296★) and `jacob-dietle/context-os` (109★) in the same niche; "OS" overclaims; the repo was still private and the plugin installed only on the owner's PC, so this was the last cheap moment.
 - **Why not "Claude" in the name:** nothing under `src/` imports from `claude-code` (only the hook file does), so the engine is host-neutral; Anthropic's brand guidance wants "X for Claude Code" in the description, not "Claude" in a product name. Claude Code stays in the subtitle/marketplace copy.
-- **Why not "Jev" in the name (JevKeep etc.):** Jev is one of two swappable classifiers (the local heuristic ships), the promise is losslessness not Jev, and upstream is already `fast-jev-compaction`.
+- **Why not "Jev" in the name (JevKeep etc.):** Jev is one of two swappable classifiers (the local ruleset ships), the promise is losslessness not Jev, and upstream is already `fast-jev-compaction`.
 - **Why not `verbatim-compact` (Claude's first recommendation):** the owner's point — "verbatim" is *how* it achieves the outcome; users care about the outcome, lossless compaction. Accepted. "Verbatim" lives in the subtitle as the how. Residual risk noted: "lossless" is becoming the niche's generic word (several tiny `lossless-context-*` repos), so the name is a category name; being first with a real product mitigates it.
 - Rejected as generic: `smartcontext`, `supercontext`, `contextsaver`, `contextgenius` (all free on npm; none say what is different).
 - Availability at decision time: npm `lossless-compact` free; GitHub only `ucalyptus/lossless-compaction` (0★).

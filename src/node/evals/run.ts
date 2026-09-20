@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import { MemoryArchive } from '../../archive/memory-store.js';
 import type { ArchiveRecord } from '../../archive/types.js';
-import { HeuristicClassifier } from '../../classifiers/heuristic.js';
+import { RulesetClassifier } from '../../classifiers/ruleset.js';
 import { JevClassifier } from '../../classifiers/jev.js';
 import { ReplayAsker, emptyCassette, parseCassette, serialiseCassette, type Cassette } from '../../classifiers/replay.js';
 import type { Classifier } from '../../classifiers/types.js';
@@ -23,7 +23,7 @@ export const EVAL_MODES = [
   'NO_COMPACTION',
   'CLAUDE_NATIVE_COMPACTION',
   'UPSTREAM_FAST_JEV',
-  'OURS_HEURISTIC',
+  'OURS_RULESET',
   'OURS_JEV',
   'OURS_JEV_UPSTREAM_WORDING',
 ] as const;
@@ -223,11 +223,11 @@ async function runMode(
       const result = await compact(transcript, asker, { keepThreshold: 0.5, ...common });
       return { output: result.messages, archived: [], requests: result.stats.requests, ms: Date.now() - started };
     }
-    case 'OURS_HEURISTIC':
+    case 'OURS_RULESET':
     case 'OURS_JEV':
     case 'OURS_JEV_UPSTREAM_WORDING': {
       let classifier: Classifier;
-      if (mode === 'OURS_HEURISTIC') classifier = new HeuristicClassifier();
+      if (mode === 'OURS_RULESET') classifier = new RulesetClassifier();
       else {
         if (!asker) return { unavailable: 'no cassette and no TYPESAFE_API_KEY' };
         classifier = new JevClassifier(asker, {

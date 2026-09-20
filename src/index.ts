@@ -17,7 +17,7 @@ export * from './core/redact.js';
 export * from './core/policy.js';
 export * from './classifiers/types.js';
 export * from './classifiers/jev.js';
-export * from './classifiers/heuristic.js';
+export * from './classifiers/ruleset.js';
 export * from './classifiers/replay.js';
 export * from './archive/types.js';
 export * from './archive/memory-store.js';

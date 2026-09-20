@@ -47,7 +47,7 @@ const session: SessionMessage[] = [
 const report: OptimizeReport = {
   sessionId: 's1',
   compactionId: 'c_1',
-  classifier: 'heuristic',
+  classifier: 'ruleset',
   messages: { before: 3, after: 2 },
   tokens: { before: 100, after: 40, archived: 60 },
   chars: { before: 400, after: 160 },
@@ -68,7 +68,7 @@ const report: OptimizeReport = {
   classified: 3,
   unscored: 0,
   redactedSecrets: 0,
-  classifierStats: { requests: 0, stateTokens: 0, stateStage: 'heuristic', ms: 1, unscored: [] },
+  classifierStats: { requests: 0, stateTokens: 0, stateStage: 'ruleset', ms: 1, unscored: [] },
   ms: 2,
 };
 
