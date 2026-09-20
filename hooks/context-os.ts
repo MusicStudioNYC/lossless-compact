@@ -160,14 +160,21 @@ export function engineFs($: {
   };
 }
 
+/** Resolves `auto` to the classifier this session can actually use. */
+export function resolvedClassifierName(
+  config: Pick<ContextOsConfig, 'classifier'>,
+  apiKey: string | undefined,
+): 'jev' | 'heuristic' {
+  return config.classifier === 'auto' ? (apiKey ? 'jev' : 'heuristic') : config.classifier;
+}
+
 /** Picks the classifier from the config and whether a key is at hand. */
 export function chooseClassifier(
   config: ContextOsConfig,
   fetchFn: HookFetch,
   apiKey: string | undefined,
 ): Classifier {
-  const wantJev = config.classifier === 'jev' || (config.classifier === 'auto' && !!apiKey);
-  if (wantJev) {
+  if (resolvedClassifierName(config, apiKey) === 'jev') {
     if (!apiKey) throw new Error('TYPESAFE_API_KEY is not configured');
     return new JevClassifier(jevAsker(fetchFn, apiKey, config.model), {
       questionStyle: config.questionStyle,
@@ -732,6 +739,17 @@ export const register: Register = (on: On, options: PluginOptions) => {
   let classifierName: string = configured.classifier;
 
   on('session.start', async ($, event, next) => {
+    // Resolve `auto` up front so a fresh session can prove whether it will use
+    // Jev or the local heuristic before the first compaction has happened.
+    try {
+      classifierName = resolvedClassifierName(configured, await getApiKey($, configured));
+    } catch (error) {
+      try {
+        $.ui.log(`context-os: could not resolve the configured classifier (${error instanceof Error ? error.message : String(error)})`);
+      } catch {
+        // The compaction path will retry and fail less if this was transient.
+      }
+    }
     try {
       await $.command.register({
         name: 'context',
@@ -751,6 +769,25 @@ export const register: Register = (on: On, options: PluginOptions) => {
   });
 
   on('command.run', { command: 'context' }, async ($, event, next) => {
+    // Interactive Claude Code owns bare `/context` as a native modal. Its
+    // command result is not a text surface, so appended hook text only appeared
+    // in headless tests. Preserve the modal and use a toast as visible proof
+    // that context-os is active; `/context status` prints the full report.
+    if (event.args.trim().length === 0) {
+      try {
+        const builtin = await next(event);
+        try {
+          $.ui.toast(`context-os active · classifier ${classifierName}; /context status for archive details`, {
+            timeoutMs: 10_000,
+          });
+        } catch {
+          // The native context modal is still useful if its companion toast fails.
+        }
+        return builtin;
+      } catch {
+        // If the host command is unavailable, fall through to our text status.
+      }
+    }
     const sessionId = await $.session.id();
     const archive = new FileArchive(engineFs($), { root: configured.archiveDir });
     const ours = await runContextCommand(event.args, {
@@ -760,17 +797,6 @@ export const register: Register = (on: On, options: PluginOptions) => {
       last: async () => (await $.store.get(lastKey(sessionId))) as LastCompaction | undefined,
       classifier: classifierName,
     });
-    // Claude Code's own `/context` (the usage grid) keeps working: a bare
-    // `/context` shows it first, with the archive status underneath.
-    if (event.args.trim().length === 0) {
-      try {
-        const builtin = await next(event);
-        const text = [builtin.text, ours.text].filter((part) => part && part.trim().length > 0).join('\n\n');
-        return { ...builtin, text };
-      } catch {
-        return ours;
-      }
-    }
     return ours;
   });
 

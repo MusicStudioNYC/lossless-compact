@@ -126,8 +126,11 @@ not exist before that.
    claude plugin install context-os@context-os
    ```
 
-3. Start a new session and type `/context`: under Claude Code's own usage
-   grid you should see a `context-os` line naming the classifier in use.
+3. Start a new session and type `/context status`. The text report should
+   start with `context-os` and name `jev` (with a key) or `heuristic` (without
+   one). A bare `/context` remains Claude Code's native usage grid and shows a
+   short `context-os active` toast; the host does not let plugins add rows to
+   that modal.
 
 Or from a checkout, for one session: `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir .`
 
@@ -136,12 +139,12 @@ holds `compactAtTokens` tokens (default 120,000 — a count, so "big" does not
 move when the model's window does; `compactAtPercent` is an optional second
 trigger, off by default), and every compaction — yours, Claude Code's own
 near the limit, or the plugin's — goes through the same hook, so none of
-them summarize. `/context` shows the usage.
+them summarize. `/context status` shows the plugin's usage and archive state.
 
 Without a `TYPESAFE_API_KEY` the plugin runs the local heuristic classifier —
 no network, ~200 ms on a 300k-token transcript. With a key (env var, settings
 `env`, or the plugin's `apiKey` option) it uses Jev. `/compact` and
-auto-compaction both go through it; the toast reads `context-os kept N/M
+auto-compaction both go through it; the compaction toast reads `context-os kept N/M
 messages, archived K units, no summary (…)`, or `fallback to built-in summary
 (…)` when it could not remove enough or something failed — in that case the
 note still goes into the summarized transcript, since the archive and the
@@ -165,7 +168,8 @@ near-limit compaction still run through the hook there.
 ### `/context`
 
 ```
-/context                    Claude Code's own usage grid, then: active tokens, archived tokens, constraints found, last compaction
+/context                    Claude Code's own usage grid, plus a context-os active/classifier toast
+/context status             active tokens, archived tokens, constraints found, classifier, last compaction
 /context list [n]           newest archived records
 /context why <id>           the action and every reason behind it
 /context show <id>          print the exact archived content

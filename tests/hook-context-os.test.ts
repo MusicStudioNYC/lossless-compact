@@ -3,6 +3,7 @@ import {
   chooseClassifier,
   engineFs,
   reportLines,
+  resolvedClassifierName,
   resolveContextOsConfig,
   runContextCommand,
 } from '../hooks/context-os.ts';
@@ -81,6 +82,18 @@ describe('resolveContextOsConfig', () => {
     expect('keepThreshold' in resolveContextOsConfig({})).toBe(false);
     expect('keepThreshold' in resolveContextOsConfig({ keepThreshold: 'nope' })).toBe(false);
     expect(resolveContextOsConfig({ keepThreshold: 0.3 }).keepThreshold).toBe(0.3);
+  });
+});
+
+describe('resolvedClassifierName', () => {
+  it('turns auto into the classifier a fresh session will actually use', () => {
+    expect(resolvedClassifierName({ classifier: 'auto' }, 'apikey_test')).toBe('jev');
+    expect(resolvedClassifierName({ classifier: 'auto' }, undefined)).toBe('heuristic');
+  });
+
+  it('preserves an explicit classifier choice', () => {
+    expect(resolvedClassifierName({ classifier: 'jev' }, undefined)).toBe('jev');
+    expect(resolvedClassifierName({ classifier: 'heuristic' }, 'apikey_test')).toBe('heuristic');
   });
 });
 

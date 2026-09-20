@@ -176,7 +176,7 @@ that matched. After the fixes:
 | Same session, built-in summary (before the index fix) | 293,863 → 7,715 tokens in 135 s; 255,089 → 5,605 in 93 s |
 | Compaction note | inserted as message 2, naming the snapshot, the archive dir and the raw `~/.claude/projects/…/<session>.jsonl` (found from inside the sandbox) |
 | `.context-os/` | `archive/<session>/index.json` + one 376 KB shard; `snapshots/<session>/<compaction>.json` (1.0 MB) |
-| `/context` | intercepts the built-in command: host usage grid, then our status (classifier `jev`, last compaction, 38 records); `list`, `why`, `restore` answer in ~10 ms |
+| `/context` | Headless mode returned the host usage text plus our status, but the interactive host renders a native modal and discards appended command text. Fixed after the interactive check: bare `/context` preserves the modal and shows an active/classifier toast; `/context status` prints the full report. `list`, `why`, `restore` answer in ~10 ms. |
 | Prompt retrieval | "what fields does the FsEntry type have…" → `e_777f…` (the d.ts chunk holding the definition) in 126 ms, excerpt at lines 3716–3747; the model answered from it and said so |
 | `turn.complete` auto-trigger | fires and `shouldCompact` is true at 293k, but `$.session.compact()` is "not available in a headless (-p / SDK) session yet"; the hook logs and carries on. **Interactive verification still open.** |
 | Keep-nothing review | on a session of unreferenced reads (7 scored, best 0.09) `$.model.fork` had no warm transcript (headless), `$.model.complete` (haiku) answered in 1.4 s — "reference-only reads with no downstream dependencies" — and the compaction proceeded verbatim in 2.1 s; with a reviewer that says "unsure" and no one to ask, the built-in summary with the note |

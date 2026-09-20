@@ -9,7 +9,7 @@
       "name": "context-os",
       "source": "./",
       "description": "Verbatim, reversible, provenance-tracked context compaction for Claude Code; /context to inspect and restore.",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "license": "MIT"
     }
   ]
