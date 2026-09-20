@@ -29,6 +29,21 @@ of `{state, questions}`; a cassette replays for free and deterministically.
 Because our state includes sketches and different question wording, upstream
 and ours never share cassette entries.
 
+## Native `/compact` comparison and the judge
+
+`--native` runs `CLAUDE_NATIVE_COMPACTION`: Claude writes a summary with a
+prompt modelled on Claude Code's own `/compact` and it replaces the history
+(`--native-keep-recent N` keeps a tail for parity). `--judge native` scores
+that summary against the same ground truth with an LLM judge
+(verbatim / paraphrased / absent per must-keep, probe and safe-to-drop item);
+`--judge all` judges every mode. Prefer `--judge native`: the verbatim modes
+are scored exactly by substring already, and every judge call sends the
+whole compacted context. Cost of one full run on `datasets/v1` through
+`claude -p --model sonnet`: 8 summaries + 8 judge calls ≈ 0.6M input tokens
+(~10 min); with `--judge all` ≈ 2M tokens (~45 min, sequential process
+spawns). With `ANTHROPIC_API_KEY` set the same run bills the API instead of
+the subscription and skips the per-call process start.
+
 ## Dataset layout
 
 ```

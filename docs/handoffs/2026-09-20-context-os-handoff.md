@@ -1,7 +1,7 @@
 # Handoff — context-os build, 2026-09-20
 
 **Status:** open. Successor: mark this done when Phase 3 (durable memory) lands.
-**Repo:** `C:\Users\Bunkspunkles\Dropbox\Websites\fast-jev-compaction` (branch `main`, commit `ed19d03`, clean).
+**Repo:** `C:\Users\Bunkspunkles\Dropbox\Websites\fast-jev-compaction` (branch `main`, commit `7747351`, clean).
 **Deployed vs local:** nothing is pushed anywhere yet. `git remote -v` shows only `upstream` (tamaratran); the owner chose to push to `<owner>/context-os` — create that empty GitHub repo, then `git remote add origin <url> && git push -u origin main`. No npm publish. The plugin has not yet been loaded in a live Claude Code session.
 **Jev key:** `~/.typesafe_key` (one line, `apikey_…`, 108 chars; not in the repo). Verified live against `jev-1.13.0`. Use it as `TYPESAFE_API_KEY="$(cat ~/.typesafe_key)"`; for the plugin put it in `~/.claude/settings.json` `env` or the plugin's `apiKey` option.
 
@@ -17,7 +17,7 @@
 - Node tier: `src/node/transcripts.ts` (Claude Code JSONL → `Message[]`, usage/cache data, compaction boundaries), `src/node/fs.ts`, `src/node/evals/{dataset,scorers,run}.ts`, `scripts/{eval,capture-sessions,make-adversarial}.ts`, npm scripts `eval`, `capture`, `adversarial`, `prepack`.
 - Datasets: `datasets/v1/adversarial/` (8 gold scenarios, committed, deterministic); `datasets/real/` (12 captured sessions, **git-ignored**, on this machine only).
 - Docs: `README.md`, `docs/architecture.md`, `docs/evals.md` (numbers), `docs/plan.md`.
-- Tests: 244 across 15 files (`npm test`); `npm run typecheck` covers the hook sandbox graph too.
+- Tests: 263 across 17 files (`npm test`); `npm run typecheck` covers the hook sandbox graph too.
 
 ## Numbers so far (docs/evals.md has the tables)
 
@@ -28,20 +28,24 @@
 ## Also done late in the chat (owner's requests)
 
 - Pre-compaction **snapshot** (`.context-os/snapshots/<session>/<compaction>.json`, sharded under 4 MiB) and a **note message** inserted after the first message of the compacted transcript naming what was removed and where the snapshot, the archive and the raw `~/.claude/projects/…/<session>.jsonl` are (`writeSnapshot`, `rawSessionLogPath`, `compactionNote`, `withCompactionNote` in `hooks/context-os.ts`; options `snapshot`, `noteRemoved`). The raw-log path is a best-effort guess from `$.session.cwd()` + `$.env.get('HOME'|'USERPROFILE')`, confirmed with `$.fs.exists` — verify in the live smoke test.
-- `CLAUDE_NATIVE_COMPACTION` mode (a Claude-Code-style summary produced through `claude -p`) and an LLM judge that scores every mode against the same ground truth semantically (`src/node/evals/{model,native,judge}.ts`, flags `--native --judge native|all`). See docs/evals.md for the resulting table.
+- `CLAUDE_NATIVE_COMPACTION` mode (a Claude-Code-style summary produced through `claude -p --model sonnet`, or the Anthropic API when `ANTHROPIC_API_KEY` exists) and an LLM judge that scores every mode against the same ground truth semantically (`src/node/evals/{model,native,judge}.ts`, flags `--native --judge native|all --native-keep-recent N --model <name>`). The report now also shows "safe_to_drop kept" (did not remove what it should have) for every mode. **The first full run was still executing when this chat ended** (started 02:52 local, `npx tsx scripts/eval.ts --dataset datasets/v1 --modes NO_COMPACTION,UPSTREAM_FAST_JEV,OURS_JEV,OURS_HEURISTIC,CLAUDE_NATIVE_COMPACTION --native --judge all --out reports`, log `reports/run-full.log`): read `reports/<newest>/report.md`, paste the "By mode" table into docs/evals.md, and sanity-check the judge (does it mark the verbatim modes' probes as `verbatim`? does the summary contain the constraint sentence?). If the run died, re-run the same command (~50 min through `claude -p`; `--judge native` is ~10 min).
+- Auto-compaction triggers on an absolute count: `compactAtTokens` (default 120 000) in `hooks/context-os.ts` `shouldCompact`; `compactAtPercent` is off unless set.
+- A bare `/context` now calls `next(event)` so Claude Code's built-in usage grid still shows, with our archive status underneath; subcommands are ours. (The built-in command exists — registering the same name intercepts it.)
+- Settings UX, owner asked for options: recommended A (plugin `userConfig` + `/config`, already there) now, B (per-project `.context-os/config.json` + `/context set <key> <value>`, precedence project › /config › defaults, `/context` shows effective values) as the next small step; C (a plugin-drawn settings panel via `ui.render`) only if the product gets users. Owner's choice pending.
 
 ## What is left, in order
 
 1. **Live smoke test in Claude Code.** The `claude` CLI on PATH is 2.1.238 (function hooks need 2.1.274+; `validate:plugin` fails on it) but the VS Code extension runs 2.1.278 — this very session's transcript says so. Run `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir .` with a ≥ 2.1.274 binary, drive a long session, `/compact`, `/context`, check `.context-os/` is written, check `prompt.submit` retrieval appears in the model's context. Unverified assumptions to confirm: `$.fs.list` entry shape (`{name}`), `$.command.register` from `session.start`, `event.text` on `prompt.submit`, the 10 s hook budget on a 300k-token transcript.
 2. **Label ~5 real sessions, model-assisted** (owner chose this): a subagent reads `datasets/real/<case>/transcript.json`, writes `labels.json` (must_keep / nice_to_keep / safe_to_truncate / safe_to_drop per `tool_use_id`, plus probes), the owner spot-checks; then `npm run eval -- --dataset datasets/real --modes OURS_JEV,OURS_HEURISTIC,UPSTREAM_FAST_JEV` gives the first real false-drop rate (Jev cassettes for the 12 real cases already exist). Re-check the 0.35 default against those labels.
-3. **Windowed classification** (upstream #52): when `fitState` reaches the `old messages collapsed` stage or worse, Jev is asked about calls it cannot see. Score in windows (build the state per batch with that batch's messages in full). `JevClassifier.score` is the place.
-4. **Phase 3 durable memory**: `EXTRACT_MEMORY_AND_ARCHIVE` exists in the taxonomy but nothing produces memories yet. Plan §13: categories, provenance (`source_ids` = event ids), `active/superseded/disputed`. Extraction channel: `$.model.fork({prompt})` in the hook (cheap, shares the prompt cache) or `$.model.complete`; store under `.context-os/memory/` via `FileArchive`-style sharding; surface via `prompt.section` (cached) or `prompt.submit` context. `findConstraints` already yields USER_CONSTRAINT candidates.
-5. **Retrieval quality**: today lexical only (`rankRecords`). Add embeddings (plan §14) and expand the query with recent active context (current files, errors). Add a retrieval column to the eval report (the check now lives only in docs/evals.md prose).
-6. **Text-message eviction** (plan §3.1): user/assistant text is never evicted; old assistant progress chatter is the next candidate class (plan §18 order). Requires memory extraction first so nothing durable is lost.
-7. **Continuous compaction** (plan §15) and cache-aware measurement: `LoadedTranscript.usage` has cache read/write per turn; wire into the report; test whether small frequent evictions beat periodic large ones.
-8. Remaining upstream hardening: #38 (question headroom before fitting), #39 (`/compact` instructions ignored), #32 (pending calls invisible in state), request budget 30k → 60k (TypeSafe allows 64k/request; left at upstream's value because it is untested live).
-9. Privacy transports: OpenRouter ZDR (`provider: { zdr: true, data_collection: 'deny' }` on `openrouter.ai/api/alpha/decisions`), `baseUrl`/`apiKeyEnv` options; `Redactor` already covers the payload.
-10. Codex adapter (plan §26) — the core takes `Message[]`; a Codex port exists (`tylerbuilds/fast-jev-compaction-codex`, MCP-based) to study.
+3. **Per-project settings** (option B above, ~80 lines in the hook + tests) if the owner confirms.
+4. **Windowed classification** (upstream #52): when `fitState` reaches the `old messages collapsed` stage or worse, Jev is asked about calls it cannot see. Score in windows (build the state per batch with that batch's messages in full). `JevClassifier.score` is the place.
+5. **Phase 3 durable memory**: `EXTRACT_MEMORY_AND_ARCHIVE` exists in the taxonomy but nothing produces memories yet. Plan §13: categories, provenance (`source_ids` = event ids), `active/superseded/disputed`. Extraction channel: `$.model.fork({prompt})` in the hook (cheap, shares the prompt cache) or `$.model.complete`; store under `.context-os/memory/` via `FileArchive`-style sharding; surface via `prompt.section` (cached) or `prompt.submit` context. `findConstraints` already yields USER_CONSTRAINT candidates.
+6. **Retrieval quality**: today lexical only (`rankRecords`). Add embeddings (plan §14) and expand the query with recent active context (current files, errors). Add a retrieval column to the eval report (the check now lives only in docs/evals.md prose).
+7. **Text-message eviction** (plan §3.1): user/assistant text is never evicted; old assistant progress chatter is the next candidate class (plan §18 order). Requires memory extraction first so nothing durable is lost.
+8. **Continuous compaction** (plan §15) and cache-aware measurement: `LoadedTranscript.usage` has cache read/write per turn; wire into the report; test whether small frequent evictions beat periodic large ones.
+9. Remaining upstream hardening: #38 (question headroom before fitting), #39 (`/compact` instructions ignored), #32 (pending calls invisible in state), request budget 30k → 60k (TypeSafe allows 64k/request; left at upstream's value because it is untested live).
+10. Privacy transports: OpenRouter ZDR (`provider: { zdr: true, data_collection: 'deny' }` on `openrouter.ai/api/alpha/decisions`), `baseUrl`/`apiKeyEnv` options; `Redactor` already covers the payload.
+11. Codex adapter (plan §26) — the core takes `Message[]`; a Codex port exists (`tylerbuilds/fast-jev-compaction-codex`, MCP-based) to study.
 
 ## Decisions and why (alternatives rejected)
 
@@ -65,6 +69,8 @@
 - Real labels: "Yes, model-assisted on ~5 sessions".
 - Next step: "Live smoke test in Claude Code 2.1.278".
 - Mid-chat: "can it make a backup of the jsonl file and then … inject something like 'Full un-compacted jsonl file can be found here…' into the newly compacted context" → done (snapshot + note, above).
+- Mid-chat: "compact at a fixed value, not percent … you tell me what's a reasonable number" → `compactAtTokens` default 120 000 (reasoning in README / chat).
+- Mid-chat: "what's the smartest way to make settings available to everyone … GUI if simple" → options A–D laid out; recommended A + B (see above).
 - Mid-chat: "did you make tests while knowing the ground truth … compare with a traditional /compact … how much it removed that it should not have, and how much it didn't remove that it should have?" → yes for the first (labels + probes; both error directions now in the report), and the native comparison + judge were built in response.
 
 ## Traps (deliberate things that look wrong)
