@@ -159,7 +159,10 @@ auto-compaction both go through it; the compaction toast reads `lossless-compact
 messages, archived K units, no summary (…)`, or `fallback to built-in summary
 (…)` when it could not remove enough or something failed — in that case the
 note still goes into the summarized transcript, since the archive and the
-snapshot were written first.
+snapshot were written first. The VS Code extension shows no toasts at all (the
+host runs it as a headless session), so the note's second line carries the
+same facts: `Classifier: jev · ~76,677→35,607 tokens (54% fewer) · 145→102
+messages · 894 ms.`
 
 When the classifier keeps *none* of five or more results it scored — either
 a wrong threshold or a stretch of the session whose tool output really was

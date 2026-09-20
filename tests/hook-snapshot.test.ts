@@ -126,6 +126,7 @@ describe('compactionNote / withCompactionNote', () => {
       rawLogPath: 'C:/Users/me/.claude/projects/c--proj/s1.jsonl',
     });
     expect(note).toContain('4 tool interactions (~60 tokens) were removed');
+    expect(note).toContain('Classifier: ruleset · ~100→40 tokens (60% fewer) · 3→2 messages · 2 ms.');
     expect(note).toContain('C:/proj/.lossless-compact/snapshots/s1/c_1.json');
     expect(note).toContain('C:/proj/.lossless-compact/archive/');
     expect(note).toContain('C:/Users/me/.claude/projects/c--proj/s1.jsonl');
@@ -156,6 +157,8 @@ describe('compactionNote / withCompactionNote', () => {
     });
     expect(note).toMatch(/built-in summary; the message above is a paraphrase/);
     expect(note).toContain('archived 4 tool interactions (~60 tokens) verbatim and saved the exact pre-compaction transcript');
+    expect(note).toContain('Classifier: ruleset · 2 ms (its ~100→40 token result was replaced by the summary).');
+    expect(note).not.toContain('% fewer');
     expect(note).toContain('C:/proj/.lossless-compact/snapshots/s1/c_1.json');
     expect(note).toContain('C:/proj/.lossless-compact/archive/');
     expect(note).not.toContain('Nothing was summarized');

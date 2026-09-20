@@ -346,15 +346,22 @@ export function compactionNote(details: {
   /** True when Claude Code's built-in summary replaced the transcript after all (a fallback). */
   summarized?: boolean;
 }): string {
-  const { actions } = details.report;
+  const { actions, tokens, messages, classifier, ms } = details.report;
   const removed = actions.ARCHIVE_ONLY + actions.KEEP_HEAD_TAIL + actions.RERUN_ON_DEMAND + actions.DROP_REDUNDANT;
-  const units = `${removed} tool interaction${removed === 1 ? '' : 's'} (~${details.report.tokens.archived.toLocaleString('en-US')} tokens)`;
+  const units = `${removed} tool interaction${removed === 1 ? '' : 's'} (~${tokens.archived.toLocaleString('en-US')} tokens)`;
+  // The toast never renders in the VS Code extension (the host runs it as a headless
+  // session), so the note is the one place the user can see what ran and how it went.
+  const fewer = tokens.before > 0 ? Math.round((1 - tokens.after / tokens.before) * 100) : 0;
+  const outcome = details.summarized
+    ? `Classifier: ${classifier} · ${ms} ms (its ~${tokens.before.toLocaleString('en-US')}→${tokens.after.toLocaleString('en-US')} token result was replaced by the summary).`
+    : `Classifier: ${classifier} · ~${tokens.before.toLocaleString('en-US')}→${tokens.after.toLocaleString('en-US')} tokens (${fewer}% fewer) · ${messages.before}→${messages.after} messages · ${ms} ms.`;
   const lines = [
     details.summarized
       ? `[lossless-compact] This conversation was compacted at ${details.at} by Claude Code's built-in summary; the message above is a paraphrase, not the original text. Before the summary was written, lossless-compact (compaction ${details.compactionId}) archived ${units} verbatim${
           details.snapshotPath ? ' and saved the exact pre-compaction transcript' : ''
         }. If you need anything the summary lost, the full history is on disk:`
       : `[lossless-compact] This conversation was compacted at ${details.at} (compaction ${details.compactionId}): ${units} were removed from the active context and archived verbatim. Nothing was summarized or paraphrased; user and assistant messages are untouched. If you need any removed message, the full history is on disk:`,
+    outcome,
   ];
   if (details.snapshotPath) {
     lines.push(`- Exact pre-compaction transcript (JSON array of messages): ${details.snapshotPath} — grep it, or read a slice.`);
