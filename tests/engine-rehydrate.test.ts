@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MemoryArchive, rankRecords } from '../src/archive/memory-store.js';
+import { MemoryArchive, codeTerms, rankRecords } from '../src/archive/memory-store.js';
 import type { ArchiveRecord } from '../src/archive/types.js';
 import { REHYDRATION_PREFACE, bestWindow, rehydrateForPrompt, retrievedBlock } from '../src/engine/rehydrate.js';
 
@@ -51,6 +51,50 @@ describe('rankRecords', () => {
   it('weights common terms down: a word in every record does not pull them all in', () => {
     const ranked = rankRecords('upload something', all);
     for (const entry of ranked) expect(entry.score).toBeLessThan(0.5);
+  });
+
+  // The live smoke test: a prompt naming `FsEntry` retrieved docs/plan.md,
+  // because prose words were rarer than the symbol in a code-heavy archive,
+  // and the same chunk archived by two compactions took two of three slots.
+  const dts = (id: string, seq: number, body: string, hash = id) =>
+    record(id, body, { seq, contentHash: hash, toolName: 'Read', metadata: { tool: 'Read', file_path: 'types/claude-code.d.ts' } });
+  const prose = record('e_plan', 'Say what fields the plan needs; the information came from earlier context and the type of memory involved.', {
+    seq: 1,
+    toolName: 'Read',
+    metadata: { tool: 'Read', file_path: 'docs/plan.md' },
+  });
+  const chunk1 = dts('e_c1', 2, 'list: (path?: string) => Promise<FsEntry[]>;\nexport type Other = { a: 1 };\n'.repeat(3));
+  const chunk2 = dts('e_c2', 3, 'export type FsEntry = { name: string; kind: "file" | "dir"; size: number };\nstat: (path: string) => Promise<FsStat>;\n');
+  const chunk2Again = dts('e_c2b', 9, chunk2.content, 'e_c2');
+  const chunk3 = dts('e_c3', 4, 'declare const unrelated: number;\n'.repeat(5));
+
+  it('lets a code-cased term outrank prose words that happen to be rare', () => {
+    const ranked = rankRecords('Without using any tools: what fields does the FsEntry type have? Say where that information came from.', [
+      prose,
+      chunk1,
+      chunk2,
+      chunk3,
+    ]);
+    expect(ranked[0]!.record.id).toBe('e_c2');
+    expect(ranked.map((r) => r.record.id)).not.toContain('e_plan');
+    expect(ranked.map((r) => r.record.id)).not.toContain('e_c3');
+  });
+
+  it('collapses records with the same contentHash to the newest one', () => {
+    const ranked = rankRecords('what fields does the FsEntry type have?', [chunk1, chunk2, chunk2Again]);
+    expect(ranked.map((r) => r.record.id)).toEqual(['e_c2b', 'e_c1']);
+  });
+
+  it('retrieves nothing for a prompt made of prose alone', () => {
+    expect(rankRecords('Say where in your context the information about the fields came from', [prose, chunk1, chunk2, chunk3])).toEqual([]);
+  });
+
+  it('codeTerms picks camelCase, ALL_CAPS, dotted members, paths and numbers, with their components', () => {
+    const { code, components } = codeTerms('Check FsEntry and MAX_UPLOAD_MB, then $.fs.stat on src/a.ts; port 54329, not the word upload.');
+    expect([...code]).toEqual(['fsentry', 'max_upload_mb', '$.fs.stat', 'src/a.ts', '54329']);
+    expect(components).toContain('upload');
+    expect(components).toContain('stat');
+    expect(components).not.toContain('max');
   });
 });
 

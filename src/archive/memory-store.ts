@@ -97,15 +97,72 @@ function matchWeight(term: string, tokens: Set<string>): { weight: number; kind:
  * such a record scores at least 0.5. Records with no match are left out;
  * best first.
  */
+const RAW_TERM = /[A-Za-z0-9_$][A-Za-z0-9_$.\-/\\]*/g;
+
+/**
+ * Query terms spelled like code: camelCase or ALL_CAPS, a path or dotted
+ * member, or anything with a digit (`FsEntry`, `MAX_UPLOAD_MB`, `$.fs.stat`,
+ * `src/a.ts`, `54329`). The user typed them as written somewhere, so they
+ * outrank prose words. Lower-cased, with the components of a compound
+ * (`stat` from `$.fs.stat`) added as plain terms.
+ */
+export function codeTerms(text: string): { code: Set<string>; components: Set<string> } {
+  const code = new Set<string>();
+  const components = new Set<string>();
+  for (const match of text.matchAll(RAW_TERM)) {
+    const raw = match[0].replace(/[.:,;]+$/, '');
+    if (raw.length < 2) continue;
+    const camel = /[a-z][A-Z]/.test(raw);
+    const caps = /^[A-Z0-9_$]{3,}$/.test(raw) && /[A-Z]/.test(raw);
+    const compound = /[A-Za-z0-9][_$./\\-][A-Za-z0-9$]/.test(raw) && !/^[\d.\-/]+$/.test(raw);
+    const digits = /\d/.test(raw) && /[A-Za-z]/.test(raw) === false && raw.length >= 3;
+    if (!(camel || caps || compound || digits)) continue;
+    const term = raw.toLowerCase();
+    code.add(term);
+    for (const part of term.split(/[_$./\\-]+/)) {
+      if (part.length >= 4 && part !== term && !STOPWORDS.has(part)) components.add(part);
+    }
+  }
+  return { code, components };
+}
+
+/** Terms that are common English rather than something a transcript would only contain on purpose. */
+const PROSE = new Set(
+  `
+  say said says tell told tells know knows knew show shows showed give gives gave take takes took
+  come came comes went goes going look looks looked think thought thinks find found finds see seen
+  sees seem seems seemed work works worked mean means meant way ways thing things something anything
+  everything nothing information detail details value values field fields name names type types
+  return returns returned answer answers question questions context earlier later already before
+  above below check checks checked change changes changed explain explains describe describes
+  summarize summary list lists write writes wrote read reads update updates updated fix fixes fixed
+  add adds added remove removes removed create creates created delete deletes deleted help helps
+  understand understood exactly actually really right wrong good bad best worst same different
+  without within where which what when whether while
+  `.split(/\s+/).filter(Boolean),
+);
+
 export function rankRecords(
   query: string,
-  records: readonly ArchiveRecord[],
+  input: readonly ArchiveRecord[],
 ): { record: ArchiveRecord; score: number }[] {
   const terms = queryTerms(query);
-  if (terms.size === 0 || records.length === 0) return [];
+  if (terms.size === 0 || input.length === 0) return [];
+  // The same content archived twice (two compactions of one session) must
+  // not take two of the caller's slots or count twice in rarity.
+  const byHash = new Map<string, ArchiveRecord>();
+  for (const record of input) {
+    const seen = byHash.get(record.contentHash);
+    if (!seen || record.seq > seen.seq) byHash.set(record.contentHash, record);
+  }
+  const records = [...byHash.values()];
+  const { code, components } = codeTerms(query);
+  for (const part of components) terms.add(part);
   // Only words the prompt actually contains can be distinctive; a stem such
-  // as `fail` (from "failing") matching a `FAIL` line is not evidence.
+  // as `fail` (from "failing") matching a `FAIL` line is not evidence, and
+  // neither is a prose word that happens to be rare in a code-heavy archive.
   const original = new Set([...termsOf(query)].filter((term) => terms.has(term)));
+  const eligible = (term: string): boolean => code.has(term) || (original.has(term) && !PROSE.has(term));
   const indexed = records.map(index);
   const df = new Map<string, number>();
   for (const term of terms) {
@@ -116,29 +173,32 @@ export function rankRecords(
     }
     df.set(term, n);
   }
-  const rareLimit = Math.max(2, Math.floor(records.length * 0.05));
-  const weight = (term: string): number => Math.log(1 + records.length / (1 + (df.get(term) ?? 0)));
+  const rareLimit = Math.max(3, Math.ceil(records.length * 0.1));
+  const emphasis = (term: string): number => (code.has(term) ? 3 : 1);
+  const weight = (term: string): number => emphasis(term) * Math.log(1 + records.length / (1 + (df.get(term) ?? 0)));
   let total = 0;
   for (const term of terms) total += weight(term);
   const scored: { record: ArchiveRecord; score: number }[] = [];
   for (const item of indexed) {
     let hits = 0;
     let distinctive = false;
+    // A record has to be anchored by a content word (something the user
+    // named, or at least a non-prose word) matched whole; prose alone —
+    // "say where that information came from" — matches everything a little
+    // and nothing in particular.
+    let anchored = false;
     for (const term of terms) {
       const w = weight(term);
       const inMeta = item.meta.has(term);
       const match = inMeta ? { weight: 1, kind: 'exact' as const } : matchWeight(term, item.content);
       if (match.weight === 0) continue;
       hits += match.weight * w * (inMeta ? 1.2 : 1);
-      if (
-        original.has(term) &&
-        (match.kind === 'exact' || match.kind === 'compound') &&
-        (df.get(term) ?? 0) <= rareLimit
-      ) {
-        distinctive = true;
+      if (eligible(term) && (match.kind === 'exact' || match.kind === 'compound')) {
+        anchored = true;
+        if ((df.get(term) ?? 0) <= rareLimit) distinctive = true;
       }
     }
-    if (hits === 0) continue;
+    if (hits === 0 || !anchored) continue;
     const share = Math.min(1, hits / total);
     scored.push({ record: item.record, score: distinctive ? Math.max(0.5, share) : share });
   }
