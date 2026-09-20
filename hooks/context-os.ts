@@ -41,6 +41,10 @@ export type ContextOsConfig = HookConfig & {
   autoRetrieve: boolean;
   /** Characters of retrieved content per prompt. */
   retrieveBudgetChars: number;
+  /** Write the exact pre-compaction transcript under `.context-os/snapshots/`. */
+  snapshot: boolean;
+  /** Insert a note into the compacted transcript saying where the full history is. */
+  noteRemoved: boolean;
 };
 
 const DEFAULTS = {
@@ -53,6 +57,8 @@ const DEFAULTS = {
   markRemovedCalls: true,
   autoRetrieve: true,
   retrieveBudgetChars: 6000,
+  snapshot: true,
+  noteRemoved: true,
 };
 
 function optionBoolean(options: PluginOptions, key: string, fallback: boolean): boolean {
@@ -83,6 +89,8 @@ export function resolveContextOsConfig(options: PluginOptions): ContextOsConfig 
       typeof options['retrieveBudgetChars'] === 'number' && Number.isFinite(options['retrieveBudgetChars'])
         ? Math.max(0, Math.min(30_000, options['retrieveBudgetChars']))
         : DEFAULTS.retrieveBudgetChars,
+    snapshot: optionBoolean(options, 'snapshot', DEFAULTS.snapshot),
+    noteRemoved: optionBoolean(options, 'noteRemoved', DEFAULTS.noteRemoved),
   };
   // Only an explicit threshold overrides the classifier's own calibration.
   if (typeof options['keepThreshold'] !== 'number') delete config.keepThreshold;
@@ -165,6 +173,150 @@ export function reportLines(report: OptimizeReport): string[] {
     `actions: ${actions || '(none)'}`,
     `protected: ${protections || '(none)'}; constraints ${report.constraints}; duplicates ${report.duplicates}; unscored ${report.unscored}; secrets redacted ${report.redactedSecrets}`,
   ];
+}
+
+/* ------------------------------------------------------------- snapshot & note */
+
+const SNAPSHOT_MAX_CHARS = 3.5 * 1024 * 1024;
+
+/** A session message without its engine handle, as plain library data. */
+function plainMessage(message: SessionMessage): Message {
+  const copy: Message = {
+    role: message.role,
+    text: message.text,
+    toolUses: message.toolUses.map((tool) => {
+      const use: Message['toolUses'][number] = { tool_use_id: tool.tool_use_id, tool: tool.tool, input: tool.input };
+      if (tool.text !== undefined) use.text = tool.text;
+      if (tool.isError) use.isError = true;
+      return use;
+    }),
+  };
+  if (message.toolResults && message.toolResults.length > 0) {
+    copy.toolResults = message.toolResults.map((result) => ({
+      tool_use_id: result.tool_use_id,
+      text: result.text,
+      isError: result.isError,
+    }));
+  }
+  return copy;
+}
+
+/**
+ * Writes the exact transcript that was about to be compacted:
+ * `<root>/snapshots/<session>/<compaction>.json`, split into
+ * `<compaction>-<n>.json` parts when it would exceed the host's 4 MiB write
+ * cap. Returns the paths written, the manifest first.
+ */
+export async function writeSnapshot(
+  fs: TextFs,
+  root: string,
+  sessionId: string,
+  compactionId: string,
+  messages: readonly SessionMessage[],
+  at: string,
+): Promise<string[]> {
+  const dir = `${root.replace(/[\\/]+$/, '')}/snapshots/${encodeURIComponent(sessionId)}`;
+  const serialised = messages.map((message) => JSON.stringify(plainMessage(message)));
+  const parts: string[][] = [[]];
+  let chars = 0;
+  for (const item of serialised) {
+    if (parts[parts.length - 1]!.length > 0 && chars + item.length + 2 > SNAPSHOT_MAX_CHARS) {
+      parts.push([]);
+      chars = 0;
+    }
+    parts[parts.length - 1]!.push(item);
+    chars += item.length + 2;
+  }
+  const manifest = `${dir}/${compactionId}.json`;
+  if (parts.length === 1) {
+    await fs.write(
+      manifest,
+      `{"version":1,"sessionId":${JSON.stringify(sessionId)},"compactionId":${JSON.stringify(compactionId)},"at":${JSON.stringify(at)},"messages":[${parts[0]!.join(',')}]}`,
+    );
+    return [manifest];
+  }
+  const written: string[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const path = `${dir}/${compactionId}-${i + 1}.json`;
+    await fs.write(path, `{"version":1,"part":${i + 1},"of":${parts.length},"messages":[${parts[i]!.join(',')}]}`);
+    written.push(path);
+  }
+  await fs.write(
+    manifest,
+    JSON.stringify({
+      version: 1,
+      sessionId,
+      compactionId,
+      at,
+      messages: messages.length,
+      parts: written.map((p) => p.slice(dir.length + 1)),
+    }),
+  );
+  return [manifest, ...written];
+}
+
+/** Where Claude Code keeps this session's raw log, if it can be found from the sandbox. */
+export async function rawSessionLogPath(
+  fs: Pick<TextFs, 'exists'>,
+  home: string | undefined,
+  cwd: string,
+  sessionId: string,
+): Promise<string | undefined> {
+  if (!home) return undefined;
+  const base = `${home.replace(/[\\/]+$/, '')}/.claude/projects`;
+  const encoded = (dir: string): string => dir.replace(/[^A-Za-z0-9]/g, '-');
+  const candidates = new Set(
+    [cwd, cwd.toLowerCase(), cwd.replace(/^([A-Za-z]):/, (m) => m.toLowerCase())].map(encoded),
+  );
+  for (const name of candidates) {
+    const path = `${base}/${name}/${sessionId}.jsonl`;
+    try {
+      if (await fs.exists(path)) return path;
+    } catch {
+      // not findable from here
+    }
+  }
+  return undefined;
+}
+
+/**
+ * The one message inserted into a compacted transcript: what was removed and
+ * exactly where the full history is. Nothing in it claims the removed
+ * content is still present.
+ */
+export function compactionNote(details: {
+  at: string;
+  compactionId: string;
+  report: OptimizeReport;
+  snapshotPath?: string;
+  archiveDir: string;
+  rawLogPath?: string;
+}): string {
+  const { actions } = details.report;
+  const removed = actions.ARCHIVE_ONLY + actions.KEEP_HEAD_TAIL + actions.RERUN_ON_DEMAND + actions.DROP_REDUNDANT;
+  const lines = [
+    `[context-os] This conversation was compacted at ${details.at} (compaction ${details.compactionId}): ${removed} tool interaction${
+      removed === 1 ? '' : 's'
+    } (~${details.report.tokens.archived.toLocaleString('en-US')} tokens) were removed from the active context and archived verbatim. Nothing was summarized or paraphrased; user and assistant messages are untouched. If you need any removed message, the full history is on disk:`,
+  ];
+  if (details.snapshotPath) {
+    lines.push(`- Exact pre-compaction transcript (JSON array of messages): ${details.snapshotPath} — grep it, or read a slice.`);
+  }
+  lines.push(
+    `- Every archived item, with the reason it was removed: ${details.archiveDir}/archive/ — a stub in this transcript names its id (e_…); grep for that id under ${details.archiveDir}/archive to find the record.`,
+  );
+  if (details.rawLogPath) {
+    lines.push(`- Raw Claude Code session log, never modified by compaction: ${details.rawLogPath}`);
+  }
+  lines.push('The user can also run /context why <id>, /context show <id> or /context restore <id>.');
+  return lines.join('\n');
+}
+
+/** The compacted transcript with the note inserted after the pinned first message. */
+export function withCompactionNote(messages: readonly Message[], note: string): Message[] {
+  const noteMessage: Message = { role: 'user', text: note, toolUses: [] };
+  if (messages.length === 0) return [noteMessage];
+  return [messages[0]!, noteMessage, ...messages.slice(1)];
 }
 
 /* ------------------------------------------------------------- /context */
@@ -402,8 +554,38 @@ export const register: Register = (on: On, options: PluginOptions) => {
       const classifier = chooseClassifier(configured, fetchFn, apiKey);
       classifierName = classifier.name;
       const archive = new FileArchive(engineFs($), { root: configured.archiveDir });
-      const { result, messages } = await optimizeSession(event.messages, configured, classifier, archive, sessionId);
+      const optimized = await optimizeSession(event.messages, configured, classifier, archive, sessionId);
+      const { result } = optimized;
+      let { messages } = optimized;
       for (const line of reportLines(result.report)) $.ui.log(line);
+      if (result.archived.length > 0 && (configured.snapshot || configured.noteRemoved)) {
+        const at = new Date().toISOString();
+        const cwd = await $.session.cwd();
+        const root = configured.archiveDir.replace(/[\\/]+$/, '');
+        const absolute = (relative: string): string => `${cwd.replace(/[\\/]+$/, '')}/${relative}`;
+        let snapshotPath: string | undefined;
+        if (configured.snapshot) {
+          try {
+            const [manifest] = await writeSnapshot(engineFs($), root, sessionId, result.report.compactionId, event.messages, at);
+            snapshotPath = manifest ? absolute(manifest) : undefined;
+          } catch (error) {
+            $.ui.log(`context-os snapshot skipped (${error instanceof Error ? error.message : String(error)})`);
+          }
+        }
+        if (configured.noteRemoved) {
+          const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'));
+          const rawLogPath = await rawSessionLogPath(engineFs($), home, cwd, sessionId);
+          const note = compactionNote({
+            at,
+            compactionId: result.report.compactionId,
+            report: result.report,
+            ...(snapshotPath ? { snapshotPath } : {}),
+            archiveDir: absolute(root),
+            ...(rawLogPath ? { rawLogPath } : {}),
+          });
+          messages = toSessionMessages(event.messages, withCompactionNote(result.messages, note));
+        }
+      }
       for (const line of decisionLogLines(result)) $.ui.log(line);
       const summary = summarize(result);
       try {

@@ -14,8 +14,15 @@ import type { Classifier, ClassifierContext, ClassifierRun } from './types.js';
  */
 export type JevQuestionStyle = 'upstream' | 'useful';
 
-/** Provisional, from upstream PR #55's measurements against jev-1.13.0; our evals re-tune it. */
-export const JEV_DEFAULT_THRESHOLD = 0.15;
+/**
+ * From the 2026-09-20 cassette sweep against jev-1.13.0 (docs/evals.md): with
+ * the `useful` wording and sketches, every labelled must-keep survives up to
+ * 0.45 and the first false drop appears at 0.50; on 12 real sessions the
+ * score mass sits at 0.3–0.4, so 0.15 (upstream PR #55's suggestion) removes
+ * only 5 % there. 0.35 keeps 0.15 of headroom below the cliff and removes
+ * ~52 % of real-session tokens.
+ */
+export const JEV_DEFAULT_THRESHOLD = 0.35;
 
 /** The two `noul` questions about one call in the `useful` wording. */
 export function usefulQuestionsFor(call: ToolCall): JevQuestions {

@@ -72,7 +72,44 @@ Cache behaviour (cache read/write tokens per turn) is available from the real
 transcripts' `usage` records (`LoadedTranscript.usage`) and is the next metric
 to wire into the report.
 
-## First results (2026-09-20, heuristic classifier, no Jev)
+## Jev results (2026-09-20, jev-1.13.0, cassettes committed for `datasets/v1`)
+
+All modes on the adversarial set, each classifier at its own default:
+
+| Mode | Mean reduction | must_keep false drops | Probes active / recoverable | Structure failures | Mean ms | Requests |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| NO_COMPACTION | 0 % | 0/6 | 5/5 · 27/27 | 0 | 0 | 0 |
+| UPSTREAM_FAST_JEV (threshold 0.5, upstream wording, deletes) | **97.0 %** | **4/6** | 5/5 · **3/27** | 0 | 305 | 8 |
+| OURS_JEV (`useful` wording, sketches, archive) | see sweep | **0/6** | 5/5 · 27/27 | 0 | ~500 | 15 |
+| OURS_HEURISTIC (0.4) | 93.0 % | 3/6 | 5/5 · 27/27 | 0 | 36 | 0 |
+
+Upstream's headline reduction is deletion: two thirds of the labelled
+must-keeps and 24 of 27 probes are gone for good. Ours never loses a probe
+(everything is archived) and, with Jev, never drops a must-keep.
+
+Threshold sweep for OURS_JEV from the same cassettes (adversarial / 12 real
+sessions, false drops on the adversarial labels):
+
+| keepThreshold | Adversarial reduction | Real reduction | must_keep false drops |
+| ---: | ---: | ---: | ---: |
+| 0.10 | 24.4 % | 0.5 % | 0/6 |
+| 0.15 (upstream #55's suggestion) | 43.7 % | 4.9 % | 0/6 |
+| 0.20 | 51.3 % | 9.4 % | 0/6 |
+| 0.30 | 71.4 % | 22.5 % | 0/6 |
+| **0.35 (default)** | 91.2 % | 51.9 % | 0/6 |
+| 0.40 | 96.4 % | 65.7 % | 0/6 |
+| 0.45 | 96.8 % | – | 0/6 |
+| 0.50 | 96.8 % | – | 1/6 |
+
+Upstream wording inside our engine (`OURS_JEV_UPSTREAM_WORDING`): 0/6 up to
+0.40, 1/6 at 0.50 — the `useful` wording buys about 0.05 of headroom. On real
+sessions Jev puts most results in the 0.3–0.4 band with this wording, so the
+default is set at 0.35: 0.15 below the first observed false drop, and enough
+reduction that the hook does not fall back to the built-in summary. Jev costs
+~9 requests and ~1.2 s per 250–760-message session (bounded concurrency 4).
+Real-session fidelity is unlabelled so far (follow-ups).
+
+## Heuristic results (2026-09-20, no Jev)
 
 Adversarial set (8 cases) and 12 real sessions (98k–330k tokens each, the
 post-compaction tails of long `aigalaxy.app` sessions), threshold sweep:

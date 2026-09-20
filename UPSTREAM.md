@@ -49,7 +49,7 @@ before the fork), 30 open. The open ones that matter, and what we did:
 
 | Upstream | Finding | Ours |
 | --- | --- | --- |
-| #26, #52, #56, #55 | `keepThreshold` 0.5 is Jev's "unsure" point, not a midpoint; with the default wording 0/256 results on 16 real sessions ever scored > 0.3 — the baseline is effectively "drop everything non-pinned". #55 measured 0.15 + explicit criteria as workable. | `JevClassifier` defaults to the `useful` wording with criteria and `defaultThreshold` 0.15 (provisional, evals re-tune); `upstream` wording kept for A/B. |
+| #26, #52, #56, #55 | `keepThreshold` 0.5 is Jev's "unsure" point, not a midpoint; with the default wording 0/256 results on 16 real sessions ever scored > 0.3 — the baseline is effectively "drop everything non-pinned". #55 measured 0.15 + explicit criteria as workable. | `JevClassifier` defaults to the `useful` wording with criteria and `defaultThreshold` 0.35 (from our cassette sweep: 0/6 false drops up to 0.45, first at 0.50; 0.15 removes only 5 % on real sessions); `upstream` wording kept for A/B. |
 | #57, #61 | Showing Jev a result preview raised ranking AUC 0.61→0.71; wording mattered more. | Tool-aware `sketchResult` shown beside the size note (`fitState` takes `sketches`). |
 | #65 | `drop_call` removes the `tool_use` but leaves the assistant's narration, so later turns believe work is in context that is not. | `applyActions` appends a marker naming the archived ids to the narrating message. |
 | #64 | Tool inputs (credentials) go to Jev unredacted. | `Redactor` runs over every text, input and sketch shown to a classifier. |

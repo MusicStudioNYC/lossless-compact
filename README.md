@@ -32,6 +32,18 @@ cannot mistake narration for work still in context). Tool call ↔ result
 structure is always preserved. If the classifier fails or is unsure, content
 stays.
 
+Before compacting, the exact transcript is written to
+`.context-os/snapshots/<session>/<compaction>.json`, and one note is inserted
+after the first message telling the model what was removed and where the
+snapshot, the archive and the raw Claude Code session log
+(`~/.claude/projects/…/<session>.jsonl`, which compaction never modifies) are,
+so it can grep or read any removed message itself.
+
+Measured (docs/evals.md): on the eight adversarial scenarios upstream's
+default deletes 4 of 6 labelled must-keep results and 24 of 27 probes for a
+97 % reduction; ours with Jev drops none and loses nothing at 91 %, and on
+twelve real 100k–330k-token sessions removes ~52 % (heuristic, no key: ~49 %).
+
 ## Install in Claude Code
 
 ```json
@@ -73,14 +85,17 @@ Archive ids appear in the stubs the model sees, e.g.
 | Option | Default | Description |
 | --- | --- | --- |
 | `classifier` | `auto` | `auto` = Jev when a key is available, else `heuristic`; or force `jev` / `heuristic` |
-| `keepThreshold` | classifier's own | Jev 0.15, heuristic 0.4 (see [docs/evals.md](docs/evals.md)) |
+| `keepThreshold` | classifier's own | Jev 0.35, heuristic 0.4 (see [docs/evals.md](docs/evals.md)) |
 | `questionStyle` | `useful` | Jev wording: `useful` (with criteria) or `upstream` |
 | `safetyMargin` | 0 | Scores this far below the threshold still keep |
 | `preserveRecentMessages` | 6 | Newest messages never touched |
 | `sketches` | true | Show the classifier a tool-aware sketch of each result |
 | `redact` | true | Replace keys, tokens and passwords before anything is sent to a classifier |
 | `markRemovedCalls` | true | Marker in a message whose tool calls were archived |
-| `archiveDir` | `.context-os` | Where the archive lives, relative to the project |
+| `archiveDir` | `.context-os` | Where the archive and snapshots live, relative to the project |
+| `snapshot` | true | Write the exact pre-compaction transcript to `.context-os/snapshots/` |
+| `noteRemoved` | true | Insert one message into the compacted transcript saying what was removed and where the snapshot, archive and raw session log are |
+| `autoRetrieve` / `retrieveBudgetChars` | true / 6000 | Search the archive before each prompt and hand the model the best exact matches |
 | `compactAtPercent` | 60 | Context usage that triggers auto-compaction |
 | `minReductionRatio` | 0.25 | Below this the built-in summary is used instead |
 | `truncateHeadChars` | 300 | Head of a result kept in a stub |

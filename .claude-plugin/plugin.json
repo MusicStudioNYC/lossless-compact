@@ -78,6 +78,18 @@
       "description": "Most characters of archived content retrieved per prompt (the host caps all hidden context at 32000).",
       "default": 6000
     },
+    "snapshot": {
+      "type": "boolean",
+      "title": "Snapshot before compaction",
+      "description": "Write the exact pre-compaction transcript to .context-os/snapshots/ so any removed message can be read back.",
+      "default": true
+    },
+    "noteRemoved": {
+      "type": "boolean",
+      "title": "Note where the history is",
+      "description": "Insert one message into the compacted transcript saying what was removed and where the snapshot, archive and raw session log are.",
+      "default": true
+    },
     "preserveRecentMessages": {
       "type": "number",
       "title": "Recent messages to preserve",
