@@ -224,7 +224,7 @@ export function chooseClassifier(
 ): Classifier {
   if (resolvedClassifierName(config, apiKey) === 'jev') {
     if (!apiKey) throw new Error('TYPESAFE_API_KEY is not configured');
-    return new JevClassifier(jevAsker(fetchFn, apiKey, config.model), {
+    return new JevClassifier(jevAsker(fetchFn, apiKey, config.model, config.baseUrl), {
       questionStyle: config.questionStyle,
     });
   }
