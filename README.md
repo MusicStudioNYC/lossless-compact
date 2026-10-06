@@ -322,7 +322,8 @@ Archive ids appear in the stubs the model sees, e.g.
 | `minReductionRatio` | 0.25 | Below this the built-in summary is used instead |
 | `truncateHeadChars` | 300 | Head of a result kept in a stub |
 | `maxStateTokens` / `maxRequestTokens` | 25000 / 30000 | Jev state and request budgets |
-| `model` / `apiKey` | `jev-latest` / env | TypeSafe model and key |
+| `model` / `apiKey` | `jev-latest` / env | TypeSafe model and key. `model` takes a comma-separated list (`a,b`): each is tried in order and the next is used when one fails |
+| `baseUrl` | TypeSafe | Send Jev requests to another System One endpoint, e.g. a gateway or proxy (`http://localhost:20128/v1/systemone`). The key is sent as a Bearer token; any non-empty value works for a gateway that ignores it |
 
 Add `.lossless-compact/` to the project's `.gitignore`.
 

@@ -135,8 +135,14 @@
     "model": {
       "type": "string",
       "title": "Jev model",
-      "description": "TypeSafe Jev model name.",
+      "description": "TypeSafe Jev model name. Give a comma-separated list to try each in order: the next is used when one fails.",
       "default": "jev-latest"
+    },
+    "baseUrl": {
+      "type": "string",
+      "title": "Jev endpoint",
+      "description": "System One URL to send Jev requests to instead of https://api.typesafe.ai/v1/systemone, e.g. a local gateway such as http://localhost:20128/v1/systemone. Leave empty for TypeSafe.",
+      "default": ""
     }
   }
 }

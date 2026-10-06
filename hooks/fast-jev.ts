@@ -42,6 +42,8 @@ export type HookFetch = (url: string, init?: HookFetchInit) => Promise<HookFetch
 
 export type HookConfig = CompactOptions & {
   apiKey?: string;
+  /** Alternative System One endpoint (a gateway or proxy); default is TypeSafe's. */
+  baseUrl?: string;
   compactAtPercent: number;
   minReductionRatio: number;
   model: string;
@@ -82,22 +84,54 @@ export function resolveHookConfig(options: PluginOptions): HookConfig {
   };
   const apiKey = optionString(options, 'apiKey');
   if (apiKey) config.apiKey = apiKey;
+  const baseUrl = optionString(options, 'baseUrl');
+  if (baseUrl) config.baseUrl = baseUrl;
   const goal = optionString(options, 'goal');
   if (goal) config.goal = goal;
   return config;
 }
 
-/** A `JevAsker` over the engine's `$.http.fetch`. */
-export function jevAsker(fetchFn: HookFetch, apiKey: string, model: string): JevAsker {
+/** The model names in a `model` option: one name, or a comma-separated fallback list. */
+export function parseModels(model: string): string[] {
+  return model
+    .split(',')
+    .map((name) => name.trim())
+    .filter((name) => name.length > 0);
+}
+
+/**
+ * A `JevAsker` over the engine's `$.http.fetch`. `model` may list several
+ * names separated by commas; each is tried in order until one answers, so a
+ * free or local model can sit in front of a paid one. `baseUrl` points the
+ * request at another System One endpoint.
+ */
+export function jevAsker(
+  fetchFn: HookFetch,
+  apiKey: string,
+  model: string,
+  baseUrl?: string,
+): JevAsker {
+  const models = parseModels(model);
   return {
     async ask(state, questions) {
-      const request = buildJevRequest({ apiKey, model }, state, questions);
-      const response = await fetchFn(request.url, {
-        method: request.method,
-        headers: request.headers,
-        body: request.body,
-      });
-      return parseJevResponse(response.status, response.ok, response.text);
+      const failures: string[] = [];
+      for (const name of models.length > 0 ? models : [undefined]) {
+        try {
+          const params = { apiKey, ...(name ? { model: name } : {}), ...(baseUrl ? { baseUrl } : {}) };
+          const request = buildJevRequest(params, state, questions);
+          const response = await fetchFn(request.url, {
+            method: request.method,
+            headers: request.headers,
+            body: request.body,
+          });
+          return parseJevResponse(response.status, response.ok, response.text);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (models.length <= 1) throw error;
+          failures.push(`${name}: ${message}`);
+        }
+      }
+      throw new Error(`Every Jev model failed (${failures.join('; ')})`);
     },
   };
 }
@@ -168,7 +202,7 @@ export async function compactSession(
   fetchFn: HookFetch,
 ): Promise<SessionCompaction> {
   if (!config.apiKey) throw new Error('TYPESAFE_API_KEY is not configured');
-  const result = await compact(messages, jevAsker(fetchFn, config.apiKey, config.model), config);
+  const result = await compact(messages, jevAsker(fetchFn, config.apiKey, config.model, config.baseUrl), config);
   return { result, messages: toSessionMessages(messages, result.messages) };
 }
 

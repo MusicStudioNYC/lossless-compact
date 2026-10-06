@@ -3,6 +3,8 @@ import {
   compactSession,
   decisionLog,
   decisionLogLines,
+  jevAsker,
+  parseModels,
   resolveHookConfig,
   summarize,
   toSessionMessages,
@@ -106,6 +108,75 @@ describe('session message mapping', () => {
     const out = toSessionMessages(messages, applyDecisions(messages, decisions, calls, 300));
     expect(out[1]).toBe(messages[1]);
     expect(out[2]).toBe(messages[2]);
+  });
+});
+
+describe('hook config baseUrl', () => {
+  it('reads baseUrl and leaves it out when unset or empty', () => {
+    expect(resolveHookConfig({ baseUrl: 'http://localhost:20128/v1/systemone' }).baseUrl).toBe(
+      'http://localhost:20128/v1/systemone',
+    );
+    expect(resolveHookConfig({}).baseUrl).toBeUndefined();
+    expect(resolveHookConfig({ baseUrl: '' }).baseUrl).toBeUndefined();
+  });
+});
+
+describe('jevAsker', () => {
+  const questions = { q: { type: 'noul', instructions: 'x' } } as never;
+  const ok = { status: 200, ok: true, text: JSON.stringify({ answers: { q: { type: 'noul', noul: 0.5 } } }) };
+
+  it('parses a comma-separated model list', () => {
+    expect(parseModels(' a , b,,c ')).toEqual(['a', 'b', 'c']);
+    expect(parseModels('')).toEqual([]);
+  });
+
+  it('sends to baseUrl when given, TypeSafe otherwise', async () => {
+    const urls: string[] = [];
+    const fetchFn = async (url: string) => (urls.push(url), ok);
+    await jevAsker(fetchFn, 'k', 'm', 'http://localhost:20128/v1/systemone').ask('s', questions);
+    await jevAsker(fetchFn, 'k', 'm').ask('s', questions);
+    expect(urls).toEqual(['http://localhost:20128/v1/systemone', 'https://api.typesafe.ai/v1/systemone']);
+  });
+
+  it('falls back to the next model when one fails', async () => {
+    const tried: string[] = [];
+    const fetchFn = async (_url: string, init?: { body?: string }) => {
+      const model = (JSON.parse(init?.body ?? '{}') as { model: string }).model;
+      tried.push(model);
+      return model === 'first' ? { status: 400, ok: false, text: 'no credits' } : ok;
+    };
+    await jevAsker(fetchFn, 'k', 'first, second').ask('s', questions);
+    expect(tried).toEqual(['first', 'second']);
+  });
+
+  it('stops at the first model that answers', async () => {
+    const tried: string[] = [];
+    const fetchFn = async (_url: string, init?: { body?: string }) => {
+      tried.push((JSON.parse(init?.body ?? '{}') as { model: string }).model);
+      return ok;
+    };
+    await jevAsker(fetchFn, 'k', 'first,second').ask('s', questions);
+    expect(tried).toEqual(['first']);
+  });
+
+  it('falls back on a network error and on a malformed answer', async () => {
+    let calls = 0;
+    const fetchFn = async () => {
+      calls += 1;
+      if (calls === 1) throw new Error('ECONNREFUSED');
+      if (calls === 2) return { status: 200, ok: true, text: '{}' };
+      return ok;
+    };
+    await jevAsker(fetchFn, 'k', 'a,b,c').ask('s', questions);
+    expect(calls).toBe(3);
+  });
+
+  it('reports every failure when all models fail, and rethrows a single model\'s own error', async () => {
+    const fail = async () => ({ status: 500, ok: false, text: 'boom' });
+    await expect(jevAsker(fail, 'k', 'a,b').ask('s', questions)).rejects.toThrow(
+      /Every Jev model failed \(a: Jev request failed \(500\): boom; b: Jev request failed \(500\): boom\)/,
+    );
+    await expect(jevAsker(fail, 'k', 'a').ask('s', questions)).rejects.toThrow(/^Jev request failed \(500\): boom$/);
   });
 });
 
