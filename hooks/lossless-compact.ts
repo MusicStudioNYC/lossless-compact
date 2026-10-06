@@ -216,6 +216,27 @@ export function noKeyNotice(
   );
 }
 
+/**
+ * One line for Jev requests that go somewhere other than TypeSafe (the
+ * `baseUrl` option). That address receives the key and the conversation, so
+ * it is named rather than silent; only scheme and host are shown, so a token
+ * or password in the URL never lands in a log or the compaction note.
+ */
+export function endpointNotice(
+  config: Pick<LosslessCompactConfig, 'classifier' | 'baseUrl'>,
+  apiKey: string | undefined,
+): string | undefined {
+  if (!config.baseUrl || resolvedClassifierName(config, apiKey) !== 'jev') return undefined;
+  let where: string;
+  try {
+    const url = new URL(config.baseUrl);
+    where = `${url.protocol}//${url.host}`;
+  } catch {
+    where = 'an address that is not a valid URL';
+  }
+  return `Jev requests go to ${where} (the plugin's baseUrl option), not TypeSafe: the key and the conversation are sent there.`;
+}
+
 /** Picks the classifier from the config and whether a key is at hand. */
 export function chooseClassifier(
   config: LosslessCompactConfig,
@@ -913,7 +934,8 @@ export const register: Register = (on: On, options: PluginOptions) => {
     try {
       const apiKey = await getApiKey($, configured);
       classifierName = resolvedClassifierName(configured, apiKey);
-      classifierNote = noKeyNotice(configured, apiKey);
+      // At most one applies: no key means the ruleset, a custom endpoint means Jev.
+      classifierNote = noKeyNotice(configured, apiKey) ?? endpointNotice(configured, apiKey);
       // One dim line in the terminal transcript (the debug log elsewhere); the
       // compaction note and `/lossless` carry the same line where it matters.
       if (classifierNote) $.ui.log(`lossless-compact: ${classifierNote}`);
@@ -980,7 +1002,7 @@ export const register: Register = (on: On, options: PluginOptions) => {
       };
       const classifier = chooseClassifier(configured, fetchFn, apiKey);
       classifierName = classifier.name;
-      classifierNote = noKeyNotice(configured, apiKey);
+      classifierNote = noKeyNotice(configured, apiKey) ?? endpointNotice(configured, apiKey);
       const archive = new FileArchive(engineFs($), { root: configured.archiveDir });
       let optimized = await optimizeSession(event.messages, configured, classifier, archive, sessionId);
       const threshold = configured.keepThreshold ?? classifier.defaultThreshold ?? 0.5;

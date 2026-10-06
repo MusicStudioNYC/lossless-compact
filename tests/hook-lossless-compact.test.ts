@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
   chooseClassifier,
+  endpointNotice,
   engineFs,
   isMenuSkill,
   menuArgs,
@@ -296,6 +297,24 @@ describe('noKeyNotice', () => {
     // A chosen ruleset is not a fallback; a chosen jev without a key fails elsewhere.
     expect(noKeyNotice({ classifier: 'ruleset' }, undefined)).toBeUndefined();
     expect(noKeyNotice({ classifier: 'jev' }, undefined)).toBeUndefined();
+  });
+});
+
+describe('endpointNotice', () => {
+  it('names a custom endpoint by scheme and host only', () => {
+    const notice = endpointNotice(
+      { classifier: 'auto', baseUrl: 'https://user:secret@gateway.example:8443/v1/systemone?token=abc' },
+      'apikey_test',
+    )!;
+    expect(notice).toMatch(/^Jev requests go to https:\/\/gateway\.example:8443 \(the plugin's baseUrl option\)/);
+    expect(notice).not.toMatch(/secret|token|abc|systemone/);
+    expect(endpointNotice({ classifier: 'jev', baseUrl: 'not a url' }, 'apikey_test')).toMatch(/not a valid URL/);
+  });
+
+  it('stays quiet for TypeSafe itself and when Jev is not the classifier', () => {
+    expect(endpointNotice({ classifier: 'auto' }, 'apikey_test')).toBeUndefined();
+    expect(endpointNotice({ classifier: 'auto', baseUrl: 'http://localhost:20128/v1/systemone' }, undefined)).toBeUndefined();
+    expect(endpointNotice({ classifier: 'ruleset', baseUrl: 'http://localhost:20128/v1/systemone' }, 'apikey_test')).toBeUndefined();
   });
 });
 
