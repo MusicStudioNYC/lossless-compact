@@ -1,6 +1,6 @@
 {
   "name": "lossless-compact",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Lossless compaction for Claude Code: nothing is summarized; everything removed is archived verbatim with provenance and restorable by id (Jev or a local ruleset). /lossless to inspect and restore.",
   "license": "MIT",
   "userConfig": {
@@ -89,6 +89,12 @@
       "title": "Note where the history is",
       "description": "Insert one message into the compacted transcript saying what was removed and where the snapshot, archive and raw session log are.",
       "default": true
+    },
+    "verbose": {
+      "type": "boolean",
+      "title": "Verbose log",
+      "description": "Log the full compaction report (actions, protections, every per-call classifier score) and archive ids to the transcript. Off: one plain line per compaction or retrieval.",
+      "default": false
     },
     "preserveRecentMessages": {
       "type": "number",

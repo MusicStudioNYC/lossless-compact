@@ -11,6 +11,7 @@ import { buildLedger, eventTokens } from '../src/core/events.js';
 import { findConstraints } from '../src/core/rules.js';
 import { optimize, type OptimizeReport, type OptimizeResult } from '../src/engine/optimize.js';
 import { REHYDRATION_PREFACE, rehydrateForPrompt } from '../src/engine/rehydrate.js';
+import { estimateTokens } from '../src/state.js';
 import {
   classifierWithKeeps,
   parseReview,
@@ -60,6 +61,11 @@ export type LosslessCompactConfig = HookConfig & {
   snapshot: boolean;
   /** Insert a note into the compacted transcript saying where the full history is. */
   noteRemoved: boolean;
+  /**
+   * Log the full compaction report and every per-call classifier decision to
+   * the transcript. Off: one plain line per compaction or retrieval.
+   */
+  verbose: boolean;
 };
 
 const DEFAULTS = {
@@ -77,6 +83,7 @@ const DEFAULTS = {
   compactAtPercent: 0,
   snapshot: true,
   noteRemoved: true,
+  verbose: false,
 };
 
 function optionBoolean(options: PluginOptions, key: string, fallback: boolean): boolean {
@@ -111,6 +118,7 @@ export function resolveLosslessCompactConfig(options: PluginOptions): LosslessCo
         : DEFAULTS.retrieveBudgetChars,
     snapshot: optionBoolean(options, 'snapshot', DEFAULTS.snapshot),
     noteRemoved: optionBoolean(options, 'noteRemoved', DEFAULTS.noteRemoved),
+    verbose: optionBoolean(options, 'verbose', DEFAULTS.verbose),
     compactAtTokens:
       typeof options['compactAtTokens'] === 'number' && Number.isFinite(options['compactAtTokens'])
         ? Math.max(0, options['compactAtTokens'])
@@ -278,7 +286,13 @@ export async function optimizeSession(
   return { result, messages: toSessionMessages(messages, result.messages) };
 }
 
-/** One line per non-trivial protection or action count, for the log. */
+/** The tool interactions a compaction took out of the context (each one a stub or a trimmed result now). */
+function archivedUnits(report: OptimizeReport): number {
+  const { actions } = report;
+  return actions.ARCHIVE_ONLY + actions.KEEP_HEAD_TAIL + actions.RERUN_ON_DEMAND + actions.DROP_REDUNDANT;
+}
+
+/** One line per non-trivial protection or action count, for the verbose log. */
 export function reportLines(report: OptimizeReport): string[] {
   const actions = Object.entries(report.actions)
     .filter(([, n]) => n > 0)
@@ -288,10 +302,84 @@ export function reportLines(report: OptimizeReport): string[] {
     .map(([rule, n]) => `${rule}=${n}`)
     .join(' ');
   return [
-    `lossless-compact ${report.compactionId}: ${report.classifier}; ~${report.tokens.before}→${report.tokens.after} tokens; archived ${report.tokens.archived} tokens in ${report.actions.ARCHIVE_ONLY + report.actions.KEEP_HEAD_TAIL + report.actions.RERUN_ON_DEMAND + report.actions.DROP_REDUNDANT} units`,
+    `lossless-compact ${report.compactionId}: ${report.classifier}; ~${report.tokens.before}→${report.tokens.after} tokens; archived ${report.tokens.archived} tokens in ${archivedUnits(report)} units`,
     `actions: ${actions || '(none)'}`,
     `protected: ${protections || '(none)'}; constraints ${report.constraints}; duplicates ${report.duplicates}; unscored ${report.unscored}; secrets redacted ${report.redactedSecrets}`,
   ];
+}
+
+/* ------------------------------------------------------------- one-liners */
+
+/** A token count the way a person reads it: 850, 8.4k, 242k, 1.2M. */
+export function shortCount(n: number): string {
+  if (n < 1000) return String(Math.round(n));
+  if (n < 9_950) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k`;
+  if (n < 999_500) return `${Math.round(n / 1000)}k`;
+  return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+}
+
+/**
+ * The line a finished compaction leaves in the transcript and the toast:
+ * how much smaller the context got, what left it, and that nothing was
+ * summarized. The full report is behind the `verbose` option and `/lossless`.
+ */
+export function compactedLine(report: OptimizeReport, reviewed = false): string {
+  const { before, after } = report.tokens;
+  const smaller = before > 0 ? Math.round((1 - after / before) * 100) : 0;
+  const units = archivedUnits(report);
+  return (
+    `lossless-compact: ~${shortCount(before)} → ${shortCount(after)} tokens (${smaller}% smaller); ` +
+    `archived ${units} old tool result${units === 1 ? '' : 's'}, nothing summarized${reviewed ? ' (reviewed)' : ''} · /lossless to browse or restore`
+  );
+}
+
+/** What fell back to Claude Code's summary, and why, in one line (an error message can be long). */
+export function fallbackLine(reason: string, maxReason = 160): string {
+  return `lossless-compact: used Claude's built-in summary instead (${clip(reason, maxReason)})`;
+}
+
+/** Why there was too little to remove, for the skip and fallback lines. */
+export function tooLittleReason(ratio: number, minimum: number): string {
+  return `only ${percent(ratio)} of the context was removable, the minimum is ${percent(minimum)}`;
+}
+
+/** `text` on one line, at most `max` characters; the end gives way. */
+function clip(text: string, max: number): string {
+  const line = text.replace(/\s+/g, ' ').trim();
+  return line.length <= max ? line : `${line.slice(0, max - 1)}…`;
+}
+
+/** A path short enough to read in a line: its last two segments when it is long. */
+function clipPath(path: string, max = 40): string {
+  const line = path.trim();
+  if (line.length <= max) return line;
+  const tail = line.split(/[\\/]+/).filter(Boolean).slice(-2).join('/');
+  return clip(`…/${tail}`, max);
+}
+
+/** An archived record in a few words: `Read src/a.ts`, `Bash "npm test"`. */
+export function describeRecord(record: Pick<ArchiveRecord, 'kind' | 'toolName' | 'metadata'>): string {
+  const what =
+    record.toolName ??
+    (record.kind === 'user_text' ? 'user message' : record.kind === 'assistant_text' ? 'assistant message' : record.kind);
+  for (const key of ['file_path', 'path', 'url', 'pattern']) {
+    const value = record.metadata[key];
+    if (typeof value === 'string' && value.trim()) return `${what} ${key === 'pattern' ? `"${clip(value, 30)}"` : clipPath(value)}`;
+  }
+  const command = record.metadata['command'];
+  if (typeof command === 'string' && command.trim()) return `${what} "${clip(command, 30)}"`;
+  return what;
+}
+
+/** The line automatic retrieval leaves: what came back into this prompt, and its size. */
+export function retrievedLine(
+  records: readonly Pick<ArchiveRecord, 'id' | 'kind' | 'toolName' | 'metadata'>[],
+  tokens: number,
+  withIds = false,
+): string {
+  const n = records.length;
+  const what = records.map((record) => describeRecord(record) + (withIds ? ` [${record.id}]` : '')).join(', ');
+  return `lossless-compact: recalled ${n} archived result${n === 1 ? '' : 's'} into this prompt: ${what} (~${shortCount(tokens)} tokens)`;
 }
 
 /* ------------------------------------------------------------- snapshot & note */
@@ -415,8 +503,8 @@ export function compactionNote(details: {
   /** `noKeyNotice`: why the ruleset ran, when it ran for want of a key. */
   classifierNote?: string;
 }): string {
-  const { actions, tokens, messages, classifier, ms } = details.report;
-  const removed = actions.ARCHIVE_ONLY + actions.KEEP_HEAD_TAIL + actions.RERUN_ON_DEMAND + actions.DROP_REDUNDANT;
+  const { tokens, messages, classifier, ms } = details.report;
+  const removed = archivedUnits(details.report);
   const units = `${removed} tool interaction${removed === 1 ? '' : 's'} (~${tokens.archived.toLocaleString('en-US')} tokens)`;
   // The toast never renders in the VS Code extension (the host runs it as a headless
   // session), so the note is the one place the user can see what ran and how it went.
@@ -863,15 +951,19 @@ async function answerCommand(
  * when the session is idle. The same `session.compact` event either way, so
  * neither summarizes.
  */
-async function startCompaction($: {
-  session: { compact: () => Promise<unknown> };
-  command: { run: (args: { command: string }) => Promise<unknown> };
-  ui: { log: (text: string) => void };
-}): Promise<void> {
+async function startCompaction(
+  $: {
+    session: { compact: () => Promise<unknown> };
+    command: { run: (args: { command: string }) => Promise<unknown> };
+    ui: { log: (text: string) => void };
+  },
+  verbose: boolean,
+): Promise<void> {
   try {
     await $.session.compact();
   } catch (error) {
-    $.ui.log(`lossless-compact: compacting through /compact instead (${error instanceof Error ? error.message : String(error)})`);
+    // Routine on the SDK path (every VS Code chat), so a diagnostic only.
+    if (verbose) $.ui.log(`lossless-compact: compacting through /compact instead (${error instanceof Error ? error.message : String(error)})`);
     await $.command.run({ command: 'compact' });
   }
 }
@@ -971,7 +1063,9 @@ export const register: Register = (on: On, options: PluginOptions) => {
     try {
       const args = menuArgs(event.text);
       const answered = await answerCommand($, args, commandState());
-      $.ui.log(`lossless-compact: /${COMMAND} ${args} answered from the slash menu (one model turn relays it; typed in full it needs none)`);
+      if (configured.verbose) {
+        $.ui.log(`lossless-compact: /${COMMAND} ${args} answered from the slash menu (one model turn relays it; typed in full it needs none)`);
+      }
       return { text: menuPrompt(args, answered) };
     } catch (error) {
       try {
@@ -988,7 +1082,7 @@ export const register: Register = (on: On, options: PluginOptions) => {
     // so the built-in summary still gets a note saying where they are.
     let fallbackNote: string | undefined;
     const fallback = async (reason: string): Promise<SessionCompactResult> => {
-      safeNotify($, `fallback to built-in summary (${reason})`);
+      safeNotify($, fallbackLine(reason, configured.verbose ? Number.POSITIVE_INFINITY : undefined));
       const built = await next(event);
       if (!fallbackNote || built.skip !== undefined || !built.messages?.length) return built;
       return { ...built, messages: withCompactionNoteSession(built.messages, fallbackNote) };
@@ -1010,20 +1104,26 @@ export const register: Register = (on: On, options: PluginOptions) => {
       // miscalibrated or right about a disposable stretch; a model that has
       // seen the conversation (or the user) decides which, see reviewKeepNothing.
       let distrust: string | undefined;
+      let reviewed = false;
       const calibration = suspectCalibration(optimized.result.actions, optimized.result.report.classified);
       if (calibration.suspect && !(await trustedForSession($, sessionId))) {
         const review = await reviewKeepNothing($, sessionId, event.messages, configured, optimized.result, threshold, calibration.best);
+        reviewed = true;
         $.ui.log(`lossless-compact: ${review.why}`);
         if (review.decision === 'keep') {
-          const reviewed = classifierWithKeeps(optimized.result.decisions, new Set(review.keep), `${classifier.name}+review`);
-          optimized = await optimizeSession(event.messages, configured, reviewed, archive, sessionId);
+          const withKeeps = classifierWithKeeps(optimized.result.decisions, new Set(review.keep), `${classifier.name}+review`);
+          optimized = await optimizeSession(event.messages, configured, withKeeps, archive, sessionId);
         } else if (review.decision === 'fallback') {
           distrust = review.why;
         }
       }
       const { result } = optimized;
       let { messages } = optimized;
-      for (const line of reportLines(result.report)) $.ui.log(line);
+      const ratio = reductionRatio(result);
+      const summary = summarize(result);
+      // The full report, the summary's figures and every per-call score are
+      // diagnostics: behind `verbose`; the user gets one line below.
+      if (configured.verbose) for (const line of [...reportLines(result.report), `summary: ${summary}`]) $.ui.log(line);
       if (result.archived.length > 0 && (configured.snapshot || configured.noteRemoved)) {
         const at = new Date().toISOString();
         const cwd = await $.session.cwd();
@@ -1054,8 +1154,7 @@ export const register: Register = (on: On, options: PluginOptions) => {
           fallbackNote = compactionNote({ ...details, summarized: true });
         }
       }
-      for (const line of decisionLogLines(result)) $.ui.log(line);
-      const ratio = reductionRatio(result);
+      if (configured.verbose) for (const line of decisionLogLines(result)) $.ui.log(line);
       const tooLittle = ratio < configured.minReductionRatio;
       // The plugin's own trigger (`plugin` in the terminal; `/compact` run
       // from turn.complete on the SDK path, where `compacting` is held) asked
@@ -1064,7 +1163,6 @@ export const register: Register = (on: On, options: PluginOptions) => {
       // typed /compact and the host's own near-limit run still fall back —
       // those need the room now.
       const own = event.trigger === 'plugin' || compacting;
-      const summary = summarize(result);
       try {
         await $.store.set(lastKey(sessionId), {
           at: new Date().toISOString(),
@@ -1075,20 +1173,16 @@ export const register: Register = (on: On, options: PluginOptions) => {
         // The status line is a nicety; never fail the compaction over it.
       }
       if (tooLittle) {
-        const reason = `below ${percent(configured.minReductionRatio)} minimum: ${summary}`;
+        const reason = tooLittleReason(ratio, configured.minReductionRatio);
         if (own) {
           safeNotify($, `lossless-compact: nothing to compact yet (${reason}); tries again once the context has grown by a quarter`);
           return { skip: reason };
         }
         return fallback(reason);
       }
-      if (distrust) return fallback(distrust);
-      safeNotify(
-        $,
-        `lossless-compact kept ${messages.length}/${event.messages.length} messages, archived ${result.archived.length} units, no summary (${summary})${
-          calibration.suspect ? ' — reviewed, see the log' : ''
-        }`,
-      );
+      // The review's own line above says what was found and who decided.
+      if (distrust) return fallback('the classifier kept nothing; see the review above');
+      safeNotify($, compactedLine(result.report, reviewed));
       return { messages: rechain(messages) };
     } catch (error) {
       return fallback(error instanceof Error ? error.message : String(error));
@@ -1106,9 +1200,8 @@ export const register: Register = (on: On, options: PluginOptions) => {
       const found = await rehydrateForPrompt(archive, sessionId, event.text, { budgetChars: room });
       if (found.blocks.length === 0) return next(event);
       try {
-        $.ui.log(
-          `lossless-compact retrieved ${found.records.map((r) => r.id).join(', ')} (~${found.chars} chars) for this prompt`,
-        );
+        const tokens = found.blocks.reduce((sum, block) => sum + estimateTokens(block), 0);
+        $.ui.log(retrievedLine(found.records, tokens, configured.verbose));
       } catch {
         // ignore
       }
@@ -1129,10 +1222,10 @@ export const register: Register = (on: On, options: PluginOptions) => {
     compacting = true;
     try {
       const { context } = await $.session.usage();
-      if (trigger.due(context)) await startCompaction($);
+      if (trigger.due(context)) await startCompaction($, configured.verbose);
     } catch (error) {
       try {
-        $.ui.log(`auto-compact skipped (${error instanceof Error ? error.message : String(error)})`);
+        $.ui.log(`lossless-compact: auto-compact skipped (${error instanceof Error ? error.message : String(error)})`);
       } catch {
         // ignore
       }
