@@ -235,11 +235,18 @@ the honest figure (on the eval the ruleset leaves 3 of 6 must-keep results in
 place verbatim where Jev keeps 6 of 6; everything is archived either way).
 Choosing `classifier: ruleset` outright gets no such line. With a key (env var, settings
 `env`, or the plugin's `apiKey` option) it uses Jev. `/compact` and
-auto-compaction both go through it; the compaction toast reads `lossless-compact kept N/M
-messages, archived K units, no summary (…)`, or `fallback to built-in summary
-(…)` when it could not remove enough or something failed — in that case the
-note still goes into the summarized transcript, since the archive and the
-snapshot were written first. The VS Code extension shows no toasts at all (the
+auto-compaction both go through it, and each leaves one line in the
+transcript (and the toast): `lossless-compact: ~242k → 203k tokens (16%
+smaller); archived 219 old tool results, nothing summarized · /lossless to
+browse or restore`, or `lossless-compact: used Claude's built-in summary
+instead (…)` when it could not remove enough or something failed — in that
+case the note still goes into the summarized transcript, since the archive
+and the snapshot were written first. Automatic retrieval says what it brought
+back the same way: `lossless-compact: recalled 2 archived results into this
+prompt: Read src/a.ts, Bash "npm test" (~3.1k tokens)`. The full report —
+action and protection counts, every per-call classifier score, archive ids —
+is behind the `verbose` option; `/lossless` shows the last compaction either
+way. The VS Code extension shows no toasts at all (the
 host runs it as a headless session), so the note's second line carries the
 same facts: `Classifier: jev · ~76,677→35,607 tokens (54% fewer) · 145→102
 messages · 894 ms.`
@@ -316,6 +323,7 @@ Archive ids appear in the stubs the model sees, e.g.
 | `archiveDir` | `.lossless-compact` | Where the archive and snapshots live, relative to the project |
 | `snapshot` | true | Write the exact pre-compaction transcript to `.lossless-compact/snapshots/` |
 | `noteRemoved` | true | Insert one message into the compacted transcript saying what was removed and where the snapshot, archive and raw session log are |
+| `verbose` | false | Log the full compaction report (actions, protections, every per-call classifier score) and archive ids; off, each compaction or retrieval logs one plain line |
 | `autoRetrieve` / `retrieveBudgetChars` | true / 6000 | Search the archive before each prompt and hand the model the best exact matches |
 | `compactAtTokens` | 120000 | Live context size that triggers auto-compaction (0 = off) |
 | `compactAtPercent` | 0 | Optional second trigger as a share of the model window (0 = off) |
