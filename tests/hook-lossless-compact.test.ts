@@ -40,7 +40,7 @@ describe('resolveLosslessCompactConfig', () => {
       safetyMargin: 0,
       sketches: true,
       redact: true,
-      markRemovedCalls: true,
+      markRemovedCalls: false,
       compactAtPercent: 0,
       compactAtTokens: 120_000,
       minReductionRatio: 0.25,
@@ -69,13 +69,13 @@ describe('resolveLosslessCompactConfig', () => {
       safetyMargin: 0.3,
       sketches: false,
       redact: false,
-      markRemovedCalls: false,
+      markRemovedCalls: true,
     });
     expect(config.archiveDir).toBe('custom-dir');
     expect(config.safetyMargin).toBe(0.3);
     expect(config.sketches).toBe(false);
     expect(config.redact).toBe(false);
-    expect(config.markRemovedCalls).toBe(false);
+    expect(config.markRemovedCalls).toBe(true);
   });
 
   it('ignores a non-string archiveDir and a non-finite safetyMargin', () => {

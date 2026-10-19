@@ -75,7 +75,10 @@ const DEFAULTS = {
   safetyMargin: 0,
   sketches: true,
   redact: true,
-  markRemovedCalls: true,
+  // Off by default: the desktop app draws each marker as an assistant
+  // message, so a long session filled up with "[lossless-compact archived
+  // ...]" lines. The compaction note tells the model the same thing once.
+  markRemovedCalls: false,
   autoRetrieve: true,
   retrieveBudgetChars: 6000,
   compactAtTokens: 120_000,
@@ -517,7 +520,7 @@ export function compactionNote(details: {
       ? `[lossless-compact] This conversation was compacted at ${details.at} by Claude Code's built-in summary; the message above is a paraphrase, not the original text. Before the summary was written, lossless-compact (compaction ${details.compactionId}) archived ${units} verbatim${
           details.snapshotPath ? ' and saved the exact pre-compaction transcript' : ''
         }. If you need anything the summary lost, the full history is on disk:`
-      : `[lossless-compact] This conversation was compacted at ${details.at} (compaction ${details.compactionId}): ${units} were removed from the active context and archived verbatim. Nothing was summarized or paraphrased; user and assistant messages are untouched. If you need any removed message, the full history is on disk:`,
+      : `[lossless-compact] This conversation was compacted at ${details.at} (compaction ${details.compactionId}): ${units} were removed from the active context and archived verbatim. Nothing was summarized or paraphrased; user and assistant messages are untouched, so an assistant message may describe a tool call whose call and result are no longer shown: that work was done, and its output is in the archive. If you need any removed message, the full history is on disk:`,
     outcome,
   ];
   if (details.classifierNote) lines.push(details.classifierNote);
