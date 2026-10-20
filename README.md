@@ -319,7 +319,7 @@ Archive ids appear in the stubs the model sees, e.g.
 | `preserveRecentMessages` | 6 | Newest messages never touched |
 | `sketches` | true | Show the classifier a tool-aware sketch of each result |
 | `redact` | true | Replace keys, tokens and passwords before anything is sent to a classifier |
-| `markRemovedCalls` | true | Marker in a message whose tool calls were archived |
+| `markRemovedCalls` | false | Marker in a message whose tool calls were archived. Off because the app shows each one as a chat message; the compaction note says it once instead |
 | `archiveDir` | `.lossless-compact` | Where the archive and snapshots live, relative to the project |
 | `snapshot` | true | Write the exact pre-compaction transcript to `.lossless-compact/snapshots/` |
 | `noteRemoved` | true | Insert one message into the compacted transcript saying what was removed and where the snapshot, archive and raw session log are |
