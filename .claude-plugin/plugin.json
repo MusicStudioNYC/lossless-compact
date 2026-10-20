@@ -1,6 +1,6 @@
 {
   "name": "lossless-compact",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Lossless compaction for Claude Code: nothing is summarized; everything removed is archived verbatim with provenance and restorable by id (Jev or a local ruleset). /lossless to inspect and restore.",
   "license": "MIT",
   "userConfig": {
@@ -18,28 +18,19 @@
     "classifier": {
       "type": "string",
       "title": "Classifier",
-      "description": "auto = Jev when a TypeSafe key is available, otherwise the local ruleset (no model, no network). `heuristic` is accepted as an older spelling.",
-      "default": "auto",
-      "options": [
-        "auto",
-        "jev",
-        "ruleset"
-      ]
+      "description": "auto, jev or ruleset. auto = Jev when a TypeSafe key is available, otherwise the local ruleset (no model, no network). `heuristic` is accepted as an older spelling.",
+      "default": "auto"
     },
     "questionStyle": {
       "type": "string",
       "title": "Jev question style",
       "description": "useful = \"is keeping this useful\" with explicit criteria (recommended); upstream = the original \"must stay verbatim\" wording.",
-      "default": "useful",
-      "options": [
-        "useful",
-        "upstream"
-      ]
+      "default": "useful"
     },
     "archiveDir": {
       "type": "string",
       "title": "Archive directory",
-      "description": "Where evicted context is stored verbatim, relative to the project.",
+      "description": "Where evicted context is stored verbatim: relative to the git repository's root (the working directory outside a repo, never inside public_html, htdocs or wwwroot), or absolute.",
       "default": ".lossless-compact"
     },
     "safetyMargin": {

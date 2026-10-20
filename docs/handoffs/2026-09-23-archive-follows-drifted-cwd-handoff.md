@@ -1,6 +1,6 @@
 # Handoff: the archive lands wherever the session has `cd`'d to
 
-**Status:** open. Written 2026-09-23 by a Claude Code chat working in yttl.org and
+**Status:** done 2026-09-28 (see Resolution at the end). Written 2026-09-23 by a Claude Code chat working in yttl.org and
 aigalaxy.app, at the owner's request: "write me a handoff about the event so that
 the agent in that repo should look into why it did that, these dot folders are not
 meant to be there". Mark done (or delete) when the fix ships.
@@ -102,3 +102,46 @@ key is `...-aigalaxy-app-public-html-themes`, which does not exist, so the
   in aigalaxy.app) printed some key fragments while cleaning yttl.org's history.
   If its compaction ever ran, its archive holds them: the reason these archives
   must never sit in a served folder.
+
+## Resolution (2026-09-28)
+
+Fixed in `hooks/lossless-compact.ts` by `projectRoot` / `archiveRoot`, at the
+owner's request ("Fix it now"):
+
+- A relative `archiveDir` now hangs off **the git repository's root**
+  (`$.session.repo().root`), which a `cd` inside the project does not move.
+  Outside a repo it is the working directory. An absolute `archiveDir` is used
+  as given. The compaction (archive, snapshot, the note's paths), retrieval
+  before each prompt and `/lossless` all resolve through the same function.
+- Whatever the anchor, it is lifted above the first `public_html`, `htdocs`
+  or `wwwroot` folder in it, with one log line (step 4 above).
+- `rawSessionLogPath` tries the working directory and the project root, then
+  scans `~/.claude/projects/*/` for `<session-id>.jsonl` (ids are unique), so
+  the raw log is found after a `cd` or a folder switch.
+- The answer is cached per working directory in the plugin instance, because
+  `repo()` reads git on every call and retrieval runs before every prompt.
+- Tests: `tests/hook-snapshot.test.ts` (`archiveRoot`, `outsideWebRoot`,
+  `rawSessionLogPath`), including a session that cds into
+  `public_html/themes` mid-way and still writes to the repo root. 305/305 pass,
+  both typechecks clean.
+
+Decided against, and why:
+
+- **The directory the session started in, recorded at `session.start`** (the
+  handoff's first candidate). The desktop app starts a session in a scratch
+  workspace and moves it into the project with its folder switch; that
+  workspace is deleted with the session, so the archive would be deleted too.
+  The git root follows a deliberate switch and ignores a `cd`.
+- **`CLAUDE_PROJECT_DIR`**: documented for command hooks, not for a function
+  hook's `$.env`; unverified, so not relied on.
+- **`www` and `public` in the web-root list**: `/var/www/<site>` and a repo's
+  `public/` are too often above or beside the project for the name to say.
+- **Offering to move archives stranded in a subfolder** (step 2, second half):
+  on 2026-09-28 there were none left under `D:\Websites` (searched 6 levels
+  deep), so it would be code for nothing. It is in `docs/follow-ups.md` in
+  case a stray one turns up.
+
+Left: a project that is **not** a git repo and whose session cds into a
+subfolder that is not a web root still archives in that subfolder. That is not
+public, only split, and it is logged in `docs/follow-ups.md`.
+

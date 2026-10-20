@@ -320,7 +320,7 @@ Archive ids appear in the stubs the model sees, e.g.
 | `sketches` | true | Show the classifier a tool-aware sketch of each result |
 | `redact` | true | Replace keys, tokens and passwords before anything is sent to a classifier |
 | `markRemovedCalls` | false | Marker in a message whose tool calls were archived. Off because the app shows each one as a chat message; the compaction note says it once instead |
-| `archiveDir` | `.lossless-compact` | Where the archive and snapshots live, relative to the project |
+| `archiveDir` | `.lossless-compact` | Where the archive and snapshots live: relative to the git repository's root (the working directory outside a repo, never inside `public_html`, `htdocs` or `wwwroot`), or absolute |
 | `snapshot` | true | Write the exact pre-compaction transcript to `.lossless-compact/snapshots/` |
 | `noteRemoved` | true | Insert one message into the compacted transcript saying what was removed and where the snapshot, archive and raw session log are |
 | `verbose` | false | Log the full compaction report (actions, protections, every per-call classifier score) and archive ids; off, each compaction or retrieval logs one plain line |

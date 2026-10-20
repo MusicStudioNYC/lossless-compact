@@ -108,6 +108,13 @@ reranker are the planned next step (plan §14).
 <project>/.lossless-compact/archive/<sessionId>/<compactionId>.json  records (≤ 3.5 MiB per shard)
 ```
 
+`<project>` is the git repository's root, not the session's working directory:
+`$.fs` resolves a relative path against the working directory *now*, and a Bash
+`cd` inside the project moves that (on 2026-09-23 an archive followed a session
+into `public_html/themes`). Outside a repo it is the working directory, lifted
+above any `public_html`, `htdocs` or `wwwroot` in it. See `archiveRoot` in
+`hooks/lossless-compact.ts`.
+
 ## Evals (`src/node/evals`, `npm run eval`)
 
 Datasets are directories of `transcript.json` (`Message[]`) plus optional

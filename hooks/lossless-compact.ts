@@ -465,28 +465,100 @@ export async function writeSnapshot(
   return [manifest, ...written];
 }
 
-/** Where Claude Code keeps this session's raw log, if it can be found from the sandbox. */
+/**
+ * Where Claude Code keeps this session's raw log, if it can be found from the
+ * sandbox. Its folder is named after the directory the session *started* in,
+ * which neither a later `cd` nor the desktop app's folder switch leaves in
+ * `cwd`; so after the likely directories comes one pass over every project
+ * folder (a session id is unique). Only a compaction asks, so the pass is rare.
+ */
 export async function rawSessionLogPath(
-  fs: Pick<TextFs, 'exists'>,
+  fs: Pick<TextFs, 'exists' | 'list'>,
   home: string | undefined,
-  cwd: string,
+  dirs: readonly string[],
   sessionId: string,
 ): Promise<string | undefined> {
   if (!home) return undefined;
   const base = `${home.replace(/[\\/]+$/, '')}/.claude/projects`;
   const encoded = (dir: string): string => dir.replace(/[^A-Za-z0-9]/g, '-');
-  const candidates = new Set(
-    [cwd, cwd.toLowerCase(), cwd.replace(/^([A-Za-z]):/, (m) => m.toLowerCase())].map(encoded),
-  );
-  for (const name of candidates) {
-    const path = `${base}/${name}/${sessionId}.jsonl`;
-    try {
-      if (await fs.exists(path)) return path;
-    } catch {
-      // not findable from here
+  const find = async (names: Iterable<string>): Promise<string | undefined> => {
+    for (const name of names) {
+      const path = `${base}/${name}/${sessionId}.jsonl`;
+      try {
+        if (await fs.exists(path)) return path;
+      } catch {
+        // not findable from here
+      }
     }
+    return undefined;
+  };
+  const likely = new Set(
+    dirs.flatMap((dir) => [dir, dir.toLowerCase(), dir.replace(/^([A-Za-z]):/, (m) => m.toLowerCase())].map(encoded)),
+  );
+  try {
+    return (await find(likely)) ?? (await find((await fs.list(base)).filter((name) => !likely.has(name))));
+  } catch {
+    return undefined;
   }
-  return undefined;
+}
+
+/* ---------------------------------------------------------- archive root */
+
+/**
+ * Folder names a web server serves by convention. An archive holds verbatim
+ * chat (keys, customer data), so it must never land under one: on 2026-09-23 a
+ * stray `.lossless-compact/` in aigalaxy.app's `public_html/themes` was one
+ * upload away from being public. `www` and `public` are left out on purpose:
+ * `/var/www/<site>` and a repo's `public/` are too often the parent of, or a
+ * sibling to, the project for the name alone to say.
+ */
+const WEB_ROOT_DIR = /^(public_html|htdocs|wwwroot)$/i;
+
+/** `dir`, or the folder just above the first web-root folder in it. */
+export function outsideWebRoot(dir: string): string {
+  const parts = dir.split(/[\\/]/);
+  const at = parts.findIndex((part) => WEB_ROOT_DIR.test(part));
+  return at < 0 ? dir : parts.slice(0, at).join('/') || '/';
+}
+
+type RootHost = {
+  session: { cwd: () => Promise<string>; repo: () => Promise<{ root: string } | null> };
+  ui: { log: (text: string) => void };
+};
+
+/**
+ * The directory the archive hangs off, absolute. `$.fs` resolves a relative
+ * path against the session's working directory *now*, and a Bash `cd` inside
+ * the project moves that: the archive, the snapshot and `/lossless` all
+ * followed a session into a served folder (the incident above). The git
+ * repository's root does not move with a `cd` inside the project; outside a
+ * repo the working directory is all there is. A switch to another project
+ * (the desktop app's folder change) does move it, which is right: the folder
+ * a session started in can be a scratch workspace the app deletes.
+ * `roots` caches the answer per working directory, since `repo()` reads git
+ * on every call and retrieval asks before every prompt.
+ */
+export async function projectRoot($: RootHost, roots: Map<string, string>): Promise<string> {
+  const cwd = await $.session.cwd();
+  const cached = roots.get(cwd);
+  if (cached !== undefined) return cached;
+  let repo: string | undefined;
+  try {
+    repo = (await $.session.repo())?.root;
+  } catch (error) {
+    $.ui.log(`lossless-compact: git root unknown, archiving under the working directory (${error instanceof Error ? error.message : String(error)})`);
+  }
+  const anchored = (repo ?? cwd).replace(/[\\/]+$/, '');
+  const root = outsideWebRoot(anchored);
+  if (root !== anchored) $.ui.log(`lossless-compact: ${anchored} is inside a web root; the archive goes under ${root} instead`);
+  roots.set(cwd, root);
+  return root;
+}
+
+/** The archive's directory, absolute: `archiveDir` under the project root, or as given when absolute. */
+export async function archiveRoot($: RootHost, archiveDir: string, roots: Map<string, string>): Promise<string> {
+  const dir = archiveDir.replace(/[\\/]+$/, '');
+  return /^([A-Za-z]:)?[\\/]/.test(dir) ? dir : `${await projectRoot($, roots)}/${dir}`;
 }
 
 /**
@@ -919,8 +991,8 @@ export function menuPrompt(args: string, answer: { text: string; context?: reado
 
 /* ------------------------------------------------------------- register */
 
-/** What `/lossless` needs from the session beyond the engine: the archive's root and the classifier as resolved so far. */
-type CommandState = { archiveDir: string; classifier: string; classifierNote?: string };
+/** What `/lossless` needs from the session beyond the engine: where the archive is and the classifier as resolved so far. */
+type CommandState = { archiveDir: string; roots: Map<string, string>; classifier: string; classifierNote?: string };
 
 /**
  * `/lossless <args>` answered, for the typed command and for the menu entry
@@ -930,12 +1002,13 @@ async function answerCommand(
   $: {
     session: { id: () => Promise<string>; messages: () => Promise<readonly Message[]> };
     store: { get: (key: string) => Promise<unknown> };
-  } & Parameters<typeof engineFs>[0],
+  } & RootHost &
+    Parameters<typeof engineFs>[0],
   args: string,
   state: CommandState,
 ): Promise<{ text: string; context?: string[] }> {
   const sessionId = await $.session.id();
-  const archive = new FileArchive(engineFs($), { root: state.archiveDir });
+  const archive = new FileArchive(engineFs($), { root: await archiveRoot($, state.archiveDir, state.roots) });
   return runContextCommand(args, {
     sessionId,
     messages: () => $.session.messages(),
@@ -1017,8 +1090,10 @@ export const register: Register = (on: On, options: PluginOptions) => {
   const trigger = new AutoCompactTrigger(configured);
   let classifierName: string = configured.classifier;
   let classifierNote: string | undefined;
+  const roots = new Map<string, string>();
   const commandState = (): CommandState => ({
     archiveDir: configured.archiveDir,
+    roots,
     classifier: classifierName,
     ...(classifierNote ? { classifierNote } : {}),
   });
@@ -1100,7 +1175,8 @@ export const register: Register = (on: On, options: PluginOptions) => {
       const classifier = chooseClassifier(configured, fetchFn, apiKey);
       classifierName = classifier.name;
       classifierNote = noKeyNotice(configured, apiKey) ?? endpointNotice(configured, apiKey);
-      const archive = new FileArchive(engineFs($), { root: configured.archiveDir });
+      const root = await archiveRoot($, configured.archiveDir, roots);
+      const archive = new FileArchive(engineFs($), { root });
       let optimized = await optimizeSession(event.messages, configured, classifier, archive, sessionId);
       const threshold = configured.keepThreshold ?? classifier.defaultThreshold ?? 0.5;
       // Upstream #53: a classifier that keeps nothing it scored is either
@@ -1129,27 +1205,24 @@ export const register: Register = (on: On, options: PluginOptions) => {
       if (configured.verbose) for (const line of [...reportLines(result.report), `summary: ${summary}`]) $.ui.log(line);
       if (result.archived.length > 0 && (configured.snapshot || configured.noteRemoved)) {
         const at = new Date().toISOString();
-        const cwd = await $.session.cwd();
-        const root = configured.archiveDir.replace(/[\\/]+$/, '');
-        const absolute = (relative: string): string => `${cwd.replace(/[\\/]+$/, '')}/${relative}`;
         let snapshotPath: string | undefined;
         if (configured.snapshot) {
           try {
-            const [manifest] = await writeSnapshot(engineFs($), root, sessionId, result.report.compactionId, event.messages, at);
-            snapshotPath = manifest ? absolute(manifest) : undefined;
+            [snapshotPath] = await writeSnapshot(engineFs($), root, sessionId, result.report.compactionId, event.messages, at);
           } catch (error) {
             $.ui.log(`lossless-compact snapshot skipped (${error instanceof Error ? error.message : String(error)})`);
           }
         }
         if (configured.noteRemoved) {
           const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'));
-          const rawLogPath = await rawSessionLogPath(engineFs($), home, cwd, sessionId);
+          const dirs = [await $.session.cwd(), await projectRoot($, roots)];
+          const rawLogPath = await rawSessionLogPath(engineFs($), home, dirs, sessionId);
           const details = {
             at,
             compactionId: result.report.compactionId,
             report: result.report,
             ...(snapshotPath ? { snapshotPath } : {}),
-            archiveDir: absolute(root),
+            archiveDir: root,
             ...(rawLogPath ? { rawLogPath } : {}),
             ...(classifierNote ? { classifierNote } : {}),
           };
@@ -1196,8 +1269,8 @@ export const register: Register = (on: On, options: PluginOptions) => {
     if (!configured.autoRetrieve || configured.retrieveBudgetChars === 0) return next(event);
     try {
       const sessionId = await $.session.id();
-      const archive = new FileArchive(engineFs($), { root: configured.archiveDir });
-      const existing = (event.context ?? []).reduce((sum, block) => sum + block.length, 0);
+      const archive = new FileArchive(engineFs($), { root: await archiveRoot($, configured.archiveDir, roots) });
+      const existing =(event.context ?? []).reduce((sum, block) => sum + block.length, 0);
       const room = Math.min(configured.retrieveBudgetChars, 32_000 - existing - REHYDRATION_PREFACE.length - 64);
       if (room < 200) return next(event);
       const found = await rehydrateForPrompt(archive, sessionId, event.text, { budgetChars: room });

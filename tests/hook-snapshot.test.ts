@@ -3,7 +3,10 @@ import type { SessionMessage } from 'claude-code';
 import type { TextFs } from '../src/archive/file-store.js';
 import type { OptimizeReport } from '../src/engine/optimize.js';
 import {
+  archiveRoot,
   compactionNote,
+  outsideWebRoot,
+  projectRoot,
   rawSessionLogPath,
   rechain,
   suspectCalibration,
@@ -27,10 +30,30 @@ function fakeFs(): TextFs & { files: Map<string, string> } {
     async exists(path) {
       return files.has(path);
     },
+    // A directory's own entries, as the host lists them: files and subfolders by name.
     async list(dir) {
-      return [...files.keys()].filter((p) => p.startsWith(`${dir}/`)).map((p) => p.slice(dir.length + 1));
+      const names = [...files.keys()].filter((p) => p.startsWith(`${dir}/`)).map((p) => p.slice(dir.length + 1).split('/')[0]!);
+      return [...new Set(names)];
     },
   };
+}
+
+/** The slice of `$` the archive root reads: a working directory that can move, a git root, a log. */
+function fakeHost(cwd: string, repo: string | null) {
+  const host = {
+    cwd,
+    repoCalls: 0,
+    logs: [] as string[],
+    session: {
+      cwd: async () => host.cwd,
+      repo: async () => {
+        host.repoCalls += 1;
+        return repo === null ? null : { root: repo };
+      },
+    },
+    ui: { log: (text: string) => void host.logs.push(text) },
+  };
+  return host;
 }
 
 const session: SessionMessage[] = [
@@ -109,9 +132,88 @@ describe('rawSessionLogPath', () => {
     const fs = fakeFs();
     const path = 'C:/Users/me/.claude/projects/c--Users-me-proj/abc.jsonl';
     fs.files.set(path, '');
-    expect(await rawSessionLogPath(fs, 'C:/Users/me', 'C:\\Users\\me\\proj', 'abc')).toBe(path);
-    expect(await rawSessionLogPath(fs, 'C:/Users/me', 'C:\\Users\\me\\other', 'abc')).toBeUndefined();
-    expect(await rawSessionLogPath(fs, undefined, 'C:\\Users\\me\\proj', 'abc')).toBeUndefined();
+    expect(await rawSessionLogPath(fs, 'C:/Users/me', ['C:\\Users\\me\\proj'], 'abc')).toBe(path);
+    expect(await rawSessionLogPath(fs, 'C:/Users/me', ['C:\\Users\\me\\other'], 'nope')).toBeUndefined();
+    expect(await rawSessionLogPath(fs, undefined, ['C:\\Users\\me\\proj'], 'abc')).toBeUndefined();
+  });
+
+  it('still finds it after a cd or a folder switch, by the session id alone', async () => {
+    const fs = fakeFs();
+    const path = 'C:/Users/me/.claude/projects/C--scratch-ws/abc.jsonl';
+    fs.files.set(path, '');
+    fs.files.set('C:/Users/me/.claude/projects/c--Users-me-proj/zzz.jsonl', '');
+    expect(await rawSessionLogPath(fs, 'C:/Users/me', ['C:\\Users\\me\\proj\\public_html\\themes', 'C:/Users/me/proj'], 'abc')).toBe(path);
+  });
+});
+
+describe('outsideWebRoot', () => {
+  it('climbs above the first served folder, any case, either separator', () => {
+    expect(outsideWebRoot('D:\\Websites\\aigalaxy.app\\public_html\\themes')).toBe('D:/Websites/aigalaxy.app');
+    expect(outsideWebRoot('C:/xampp/HTDOCS/shop')).toBe('C:/xampp');
+    expect(outsideWebRoot('/inetpub/wwwroot')).toBe('/inetpub');
+    expect(outsideWebRoot('/public_html')).toBe('/');
+  });
+
+  it('leaves everything else alone, www and public included', () => {
+    expect(outsideWebRoot('D:\\Websites\\aigalaxy.app')).toBe('D:\\Websites\\aigalaxy.app');
+    expect(outsideWebRoot('/var/www/site')).toBe('/var/www/site');
+    expect(outsideWebRoot('/home/me/app/public')).toBe('/home/me/app/public');
+    expect(outsideWebRoot('/home/me/public_html_backup')).toBe('/home/me/public_html_backup');
+  });
+});
+
+describe('archiveRoot', () => {
+  it('stays at the git root while the session cds around inside the project (2026-09-23)', async () => {
+    const host = fakeHost('D:\\Websites\\aigalaxy.app', 'D:\\Websites\\aigalaxy.app');
+    const roots = new Map<string, string>();
+    const fs = fakeFs();
+    expect(await archiveRoot(host, '.lossless-compact', roots)).toBe('D:\\Websites\\aigalaxy.app/.lossless-compact');
+    host.cwd = 'D:\\Websites\\aigalaxy.app\\public_html\\themes';
+    const root = await archiveRoot(host, '.lossless-compact/', roots);
+    expect(root).toBe('D:\\Websites\\aigalaxy.app/.lossless-compact');
+    const [manifest] = await writeSnapshot(fs, root, 's1', 'c_1', session, '2026-09-23T18:13:10.000Z');
+    expect(manifest).toBe('D:\\Websites\\aigalaxy.app/.lossless-compact/snapshots/s1/c_1.json');
+    expect([...fs.files.keys()].some((p) => /public_html/i.test(p))).toBe(false);
+    expect(host.logs).toEqual([]);
+  });
+
+  it('asks git once per working directory', async () => {
+    const host = fakeHost('/repo/src', '/repo');
+    const roots = new Map<string, string>();
+    await archiveRoot(host, '.lossless-compact', roots);
+    await archiveRoot(host, '.lossless-compact', roots);
+    expect(host.repoCalls).toBe(1);
+    host.cwd = '/repo/docs';
+    await archiveRoot(host, '.lossless-compact', roots);
+    expect(host.repoCalls).toBe(2);
+  });
+
+  it('uses the working directory outside a repo, but never a served folder', async () => {
+    const roots = new Map<string, string>();
+    expect(await archiveRoot(fakeHost('/home/me/notes', null), '.lossless-compact', roots)).toBe('/home/me/notes/.lossless-compact');
+    const served = fakeHost('/home/me/site/public_html/blog', null);
+    expect(await archiveRoot(served, '.lossless-compact', roots)).toBe('/home/me/site/.lossless-compact');
+    expect(served.logs.join('\n')).toContain('inside a web root');
+  });
+
+  it('falls back to the working directory when git cannot be asked, and says so', async () => {
+    const host = fakeHost('/repo', '/repo');
+    host.session.repo = async () => {
+      throw new Error('git missing');
+    };
+    expect(await archiveRoot(host, '.lossless-compact', new Map())).toBe('/repo/.lossless-compact');
+    expect(host.logs.join('\n')).toContain('git missing');
+  });
+
+  it('takes an absolute archiveDir as given, without asking git', async () => {
+    const host = fakeHost('/repo/public_html', '/repo');
+    expect(await archiveRoot(host, 'D:\\archives\\', new Map())).toBe('D:\\archives');
+    expect(await archiveRoot(host, '/srv/archives', new Map())).toBe('/srv/archives');
+    expect(host.repoCalls).toBe(0);
+  });
+
+  it('projectRoot is the same anchor, for finding the raw log', async () => {
+    expect(await projectRoot(fakeHost('/repo/a/b', '/repo'), new Map())).toBe('/repo');
   });
 });
 

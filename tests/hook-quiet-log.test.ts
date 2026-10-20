@@ -121,7 +121,8 @@ function plugin(options: Record<string, unknown>) {
   const logs: string[] = [];
   const toasts: string[] = [];
   const $ = {
-    session: { id: async () => 'sess-1', cwd: async () => '/proj' },
+    // repo() as well: without it the archive root logs "git root unknown", a line the real host never draws.
+    session: { id: async () => 'sess-1', cwd: async () => '/proj', repo: async () => ({ root: '/proj' }) },
     env: { get: async () => undefined },
     settings: { read: async () => ({}) },
     http: {
