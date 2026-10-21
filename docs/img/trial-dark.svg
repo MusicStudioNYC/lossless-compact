@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="480" viewBox="0 0 880 480" role="img" aria-label="Try lossless-compact on your own chats: one prompt finds your longest uncompacted chats, copies them, compacts the copies with Claude Code's /compact and with lossless-compact, asks every copy the same questions, and reports what each still knew.">
+<title>Try lossless-compact on your own chats</title>
+<style>text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;fill:#f0f0ee}
+.h1{font-size:21px;font-weight:650}.sub{font-size:13px;fill:#c3c2b7}.step{font-size:14px;font-weight:600}.desc{font-size:12px;fill:#c3c2b7}
+.num{font-size:12px;font-weight:700;fill:#0d1117}.label{font-size:11.5px;fill:#9d9b93;letter-spacing:.04em}.q{font-size:14.5px;font-weight:600}.said{font-size:12px;fill:#c3c2b7}
+.who{font-size:12.5px;font-weight:600}.ans{font-size:13px}.badge{font-size:11.5px;font-weight:600}.chip{font-size:12.5px;fill:#c3c2b7}.cta{font-size:13.5px;font-weight:600}.url{font-size:12.5px;fill:#9d9b93}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}</style>
+<text x="16" y="31" class="h1">Try lossless-compact on your own chats</text>
+<text x="16" y="54" class="sub">One prompt, pasted into a new Claude Code chat, runs the whole test side by side with Claude's own /compact.</text>
+<rect x="16" y="76" width="152" height="118" rx="10" fill="#161b22" stroke="#30363d"/>
+<circle cx="40" cy="102" r="11" fill="#3987e5"/>
+<text x="40" y="106" class="num" text-anchor="middle">1</text>
+<text x="59" y="107" class="step">Finds</text>
+<text x="30" y="136" class="desc">your longest chats</text>
+<text x="30" y="153" class="desc">that were never</text>
+<text x="30" y="170" class="desc">compacted</text>
+<path d="M175.0 129.0 L182.0 135.0 L175.0 141.0" fill="none" stroke="#9d9b93" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="190" y="76" width="152" height="118" rx="10" fill="#161b22" stroke="#30363d"/>
+<circle cx="214" cy="102" r="11" fill="#3987e5"/>
+<text x="214" y="106" class="num" text-anchor="middle">2</text>
+<text x="233" y="107" class="step">Copies</text>
+<text x="204" y="136" class="desc">each chat 3 times;</text>
+<text x="204" y="153" class="desc">your originals are</text>
+<text x="204" y="170" class="desc">only ever read</text>
+<path d="M349.0 129.0 L356.0 135.0 L349.0 141.0" fill="none" stroke="#9d9b93" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="364" y="76" width="152" height="118" rx="10" fill="#161b22" stroke="#30363d"/>
+<circle cx="388" cy="102" r="11" fill="#3987e5"/>
+<text x="388" y="106" class="num" text-anchor="middle">3</text>
+<text x="407" y="107" class="step">Compacts</text>
+<text x="378" y="136" class="desc">one copy: Claude's</text>
+<text x="378" y="153" class="desc">/compact; the rest:</text>
+<text x="378" y="170" class="desc">lossless-compact</text>
+<path d="M523.0 129.0 L530.0 135.0 L523.0 141.0" fill="none" stroke="#9d9b93" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="538" y="76" width="152" height="118" rx="10" fill="#161b22" stroke="#30363d"/>
+<circle cx="562" cy="102" r="11" fill="#3987e5"/>
+<text x="562" y="106" class="num" text-anchor="middle">4</text>
+<text x="581" y="107" class="step">Quizzes</text>
+<text x="552" y="136" class="desc">every copy with the</text>
+<text x="552" y="153" class="desc">same questions about</text>
+<text x="552" y="170" class="desc">details from the chat</text>
+<path d="M697.0 129.0 L704.0 135.0 L697.0 141.0" fill="none" stroke="#9d9b93" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="712" y="76" width="152" height="118" rx="10" fill="#161b22" stroke="#30363d"/>
+<circle cx="736" cy="102" r="11" fill="#3987e5"/>
+<text x="736" y="106" class="num" text-anchor="middle">5</text>
+<text x="755" y="107" class="step">Reports</text>
+<text x="726" y="136" class="desc">what each still knew,</text>
+<text x="726" y="153" class="desc">with time and cost,</text>
+<text x="726" y="170" class="desc">then cleans up</text>
+<text x="16" y="222" class="label">THE REPORT ASKS BOTH COPIES THE SAME THING · AN EXAMPLE FROM A TEST RUN</text>
+<text x="16" y="250" class="q">“Which host port is the Postgres container mapped to in docker-compose.yml?”</text>
+<text x="16" y="270" class="said">The chat had read it from the file: <tspan class="mono" style="fill:#f0f0ee">55432</tspan></text>
+<rect x="16" y="286" width="416" height="104" rx="10" fill="#161b22" stroke="#30363d"/>
+<rect x="16" y="298" width="4" height="80" rx="2" fill="#6b6a66"/>
+<text x="34" y="312" class="who">Claude Code /compact</text>
+<text x="416" y="312" class="badge" text-anchor="end" style="fill:#9d9b93">–  didn't know</text>
+<text x="34" y="336" class="ans">“I don't know. I never read docker-compose.yml</text>
+<text x="34" y="354" class="ans">in this conversation, so I have no port mapping</text>
+<text x="34" y="372" class="ans">to report.”</text>
+<rect x="448" y="286" width="416" height="104" rx="10" fill="#161b22" stroke="#30363d"/>
+<rect x="448" y="298" width="4" height="80" rx="2" fill="#3987e5"/>
+<text x="466" y="312" class="who">lossless-compact</text>
+<text x="848" y="312" class="badge" text-anchor="end" style="fill:#3fb950">✓  right</text>
+<text x="466" y="336" class="ans">“Host port 55432 (Postgres 16.4, database</text>
+<text x="466" y="354" class="ans">billing_test). I read this from docker-compose.yml</text>
+<text x="466" y="372" class="ans">earlier in our conversation.”</text>
+<text x="16" y="420" class="chip"><tspan style="fill:#3fb950;font-weight:700">✓</tspan>  Your chats are only read</text>
+<text x="304" y="420" class="chip"><tspan style="fill:#3fb950;font-weight:700">✓</tspan>  Shows you the cost before it starts</text>
+<text x="592" y="420" class="chip"><tspan style="fill:#3fb950;font-weight:700">✓</tspan>  Cleans up after, or installs it</text>
+<line x1="16" x2="864" y1="438" y2="438" stroke="#30363d"/>
+<text x="16" y="464" class="cta">Paste the prompt from <tspan class="mono" style="fill:#3987e5">docs/trial.md</tspan> into a new Claude Code chat</text>
+<text x="864" y="464" class="url" text-anchor="end">github.com/MusicStudioNYC/lossless-compact</text>
+</svg>

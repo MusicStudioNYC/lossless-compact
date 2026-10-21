@@ -1,5 +1,10 @@
 # Try it on your own chats
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="img/trial-dark.svg">
+  <img alt="Try lossless-compact on your own chats: one prompt, pasted into a new Claude Code chat, finds your longest chats that were never compacted, copies each one (the originals are only read), compacts one copy with Claude's /compact and the others with lossless-compact, asks every copy the same questions about details from the chat, and reports what each still knew with time and cost, then cleans up. Example from a test run: asked which host port Postgres was mapped to, the /compact copy said it didn't know; the lossless-compact copy answered 55432." src="img/trial.svg" width="880">
+</picture>
+
 The numbers in the README come from eight hand-built test cases. This is the
 same comparison on your own long Claude Code chats: copies of each chat are
 compacted with Claude Code's own `/compact`, with lossless-compact's local
