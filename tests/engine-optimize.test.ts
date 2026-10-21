@@ -3,6 +3,7 @@ import { MemoryArchive } from '../src/archive/memory-store.js';
 import type { ArchiveStore } from '../src/archive/types.js';
 import type { ActionDecision, ClassifierScores } from '../src/core/actions.js';
 import type { Classifier } from '../src/classifiers/types.js';
+import { RulesetClassifier } from '../src/classifiers/ruleset.js';
 import { optimize, type OptimizeOptions, type OptimizeResult } from '../src/engine/optimize.js';
 import type { Message, ToolUse, ToolResult } from '../src/types.js';
 
@@ -435,5 +436,116 @@ describe('optimize: idempotent archiving', () => {
     const idsSecond = new Set(second.result.archived.map((r) => r.id));
     expect(idsFirst.size).toBeGreaterThan(0);
     expect(idsSecond).toEqual(idsFirst);
+  });
+});
+
+describe('optimize: a failure left in view after the call that worked was archived', () => {
+  // Seen live (Claude Code 2.1.305, ruleset): a refused Bash `cat` and a
+  // wrong-path Read were kept as unresolved errors, the Read that worked was
+  // archived with no marker, and the compacted model said it had never read
+  // the file whose values it had quoted.
+  const refused = "Quoted text in this command can't be checked before it runs";
+  const missing = 'File does not exist. Note: your current working directory is /home/u/proj.';
+  const compose =
+    'services:\n  db:\n    image: postgres:16\n    ports: ["55432:5432"]\n    environment:\n      POSTGRES_DB: billing_test\n' +
+    '# local only\n'.repeat(40);
+  const right = '/home/u/proj/docker-compose.yml';
+
+  function live(command: string): Message[] {
+    return [
+      message('user', 'Set up the test database the way docker-compose does.'),
+      call('b1', 'Bash', { command }, refused, true),
+      result('b1', refused, true),
+      call('r1', 'Read', { file_path: '/home/u/wrong/docker-compose.yml' }, missing, true),
+      result('r1', missing, true),
+      call('r2', 'Read', { file_path: right }, compose),
+      result('r2', compose),
+      message('assistant', 'docker-compose starts Postgres 16 on port 55432 with the database billing_test.'),
+      message('assistant', 'Next I will write the migration.'),
+      message('assistant', 'Migration written.'),
+      message('assistant', 'Tests are green.'),
+      message('user', 'what database does docker-compose create?'),
+    ];
+  }
+
+  /** Scores every candidate 0.05 except the tool_use ids given, which keep. */
+  function scoring(keep: readonly string[] = []): Classifier {
+    return {
+      name: 'scoring',
+      async score(candidates) {
+        const scores = new Map<string, ClassifierScores>();
+        for (const c of candidates) {
+          const value = keep.includes(c.tool_use_id) ? 0.9 : 0.05;
+          scores.set(c.id, { keepCall: value, keepResult: value });
+        }
+        return { scores, stats: { requests: 1, stateTokens: 0, stateStage: 'fake', ms: 0, unscored: [] } };
+      },
+    };
+  }
+
+  const both = 'for f in docker-compose.yml .env.example; do echo "== $f"; cat "$f"; done';
+
+  it('notes on a kept failure that a later read of the same file succeeded, and where it is archived', async () => {
+    const { result: out, archive } = await run(live(both), { classifier: scoring(), markRemovedCalls: false });
+    // .env.example was never read, so the Bash failure stays protected; the
+    // wrong-path Read was fixed by the right-path one and goes like any read.
+    expect(out.actions[0]!.protectedBy).toEqual(['unresolved_error']);
+    expect(out.actions[1]!.protectedBy).toEqual([]);
+    expect(out.actions[1]!.action).toBe('ARCHIVE_ONLY');
+    expect(out.actions[2]!.action).toBe('ARCHIVE_ONLY');
+    const archiveId = out.actions[2]!.archiveIds![0]!;
+    const note = `[lossless-compact: after this failed, Read file_path=${right} → ${archiveId} succeeded; archived out of context, /lossless restore <id>]`;
+    expect(findToolResult(out.messages, 'b1')!.text).toBe(`${refused}\n${note}`);
+    expect(findToolUse(out.messages, 'b1')!.text).toBe(`${refused}\n${note}`);
+    expect(findToolResult(out.messages, 'b1')!.isError).toBe(true);
+    expect(findToolUse(out.messages, 'r1')).toBeUndefined();
+    expect((await archive.get(archiveId))!.content).toBe(compose);
+  });
+
+  it('leaves no failed attempt behind when the later read fixed all of it', async () => {
+    const { result: out } = await run(live('for f in docker-compose.yml; do cat "$f"; done'), {
+      classifier: scoring(),
+      markRemovedCalls: false,
+    });
+    expect(out.actions.slice(0, 3).map((a) => a.action)).toEqual(['ARCHIVE_ONLY', 'ARCHIVE_ONLY', 'ARCHIVE_ONLY']);
+    const active = out.messages.flatMap((m) => [...m.toolUses.map((u) => u.text ?? ''), ...(m.toolResults ?? []).map((r) => r.text)]);
+    expect(active.some((text) => text.includes(refused) || text.includes(missing))).toBe(false);
+  });
+
+  it('adds nothing while the call that worked is still in view', async () => {
+    const messages = live(both);
+    const { result: out } = await run(messages, { classifier: scoring(['r2']), markRemovedCalls: false });
+    expect(out.actions[2]!.action).toBe('KEEP_VERBATIM');
+    expect(out.messages).toContain(messages[1]);
+    expect(out.messages).toContain(messages[2]);
+  });
+
+  it('an error never fixed stays protected and unannotated', async () => {
+    const messages = [
+      message('user', 'Set up the test database the way docker-compose does.'),
+      call('r1', 'Read', { file_path: '/home/u/wrong/docker-compose.yml' }, missing, true),
+      result('r1', missing, true),
+      call('g1', 'Glob', { pattern: '**/docker-compose.yml' }, right),
+      result('g1', right),
+      message('assistant', 'Found it, but I will stop here.'),
+      message('assistant', 'Waiting.'),
+      message('user', 'ok'),
+    ];
+    const { result: out } = await run(messages, { classifier: scoring(), markRemovedCalls: false });
+    expect(out.actions[0]!.protectedBy).toEqual(['unresolved_error']);
+    expect(out.messages).toContain(messages[1]);
+    expect(out.messages).toContain(messages[2]);
+  });
+
+  it('with the ruleset, as live: the failures are never the only trace of reading the file', async () => {
+    for (const command of [both, 'for f in docker-compose.yml; do cat "$f"; done']) {
+      const { result: out } = await run(live(command), { classifier: new RulesetClassifier(), markRemovedCalls: false });
+      const successInView = findToolUse(out.messages, 'r2') !== undefined;
+      const failures = out.messages.flatMap((m) => m.toolResults ?? []).filter((r) => r.isError);
+      for (const failure of failures) {
+        if (!successInView) expect(failure.text).toContain(`Read file_path=${right} → `);
+      }
+      expect(successInView || failures.length === 0 || failures.every((f) => f.text.includes('succeeded; archived'))).toBe(true);
+    }
   });
 });

@@ -75,6 +75,16 @@ extraction channel). Each hook dispatch has a 10 s budget.
    was not edited later) or `KEEP_HEAD_TAIL`
 8. otherwise → `ARCHIVE_ONLY`
 
+An error is unresolved until a later call fixes it (`errorResolvedLater` in
+`src/core/rules.ts`): the same tool on the same target (for Bash, the same
+command) succeeds, or every file the failed call was trying to read is later
+read successfully at any path, by Read or by a Bash that only prints files
+(`cat`, `head`, `sed -n` …). A command that does more than print (`npm test
+a.test.ts`) is fixed only by its own later success. A failure that stays in
+view while every later success at the same thing was archived gets one line
+appended to its result naming the archive id (`laterSuccessNote`), so it never
+reads as the last word on that file.
+
 Fail-safe by construction: anything the system is unsure about stays. The
 dependency graph indexes anchors found in a result's *content* (paths,
 identifiers, error lines, long lines), not the call's input path, so a plain

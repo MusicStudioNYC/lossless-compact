@@ -1,4 +1,4 @@
-import { pathsIn } from '../core/rules.js';
+import { errorResolvedLater, pathsIn } from '../core/rules.js';
 import type { ClassifierScores } from '../core/actions.js';
 import type { Message, ToolCall } from '../types.js';
 import type { Classifier, ClassifierContext, ClassifierRun } from './types.js';
@@ -30,33 +30,6 @@ function categoryDefaults(
   if (NON_REPRODUCIBLE_TOOLS.has(tool)) return { keepCall: 0.5, keepResult: 0.7 };
   // No signal for this tool; a neutral middle ground rather than a guess.
   return { keepCall: 0.5, keepResult: 0.4 };
-}
-
-function inputPathOf(input: Record<string, unknown>): string | undefined {
-  for (const key of ['file_path', 'path', 'notebook_path', 'filePath']) {
-    const value = input[key];
-    if (typeof value === 'string' && value.length > 0) return value;
-  }
-  return undefined;
-}
-
-/** Whether a later call of the same tool on the same target already succeeded. */
-function laterSuccessResolved(call: ToolCall, calls: readonly ToolCall[]): boolean {
-  const path = inputPathOf(call.input);
-  const command = typeof call.input['command'] === 'string' ? call.input['command'] : undefined;
-  for (const later of calls) {
-    if (later.callIndex <= call.callIndex || later.tool !== call.tool || later.isError) continue;
-    if (command !== undefined) {
-      if (later.input['command'] === command) return true;
-      continue;
-    }
-    if (path !== undefined) {
-      if (inputPathOf(later.input) === path) return true;
-      continue;
-    }
-    return true;
-  }
-  return false;
 }
 
 /** Recursively sorted-key JSON, so input order never affects the comparison. */
@@ -151,7 +124,7 @@ export class RulesetClassifier implements Classifier {
       }
 
       if (call.isError) {
-        keepResult = laterSuccessResolved(call, context.calls) ? 0.2 : 0.75;
+        keepResult = errorResolvedLater(call, context.calls) ? 0.2 : 0.75;
       }
 
       const age = Math.max(0, total - 1 - call.resultIndex);

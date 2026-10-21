@@ -11,6 +11,7 @@ import { decideInteraction, resolvePolicyOptions, type PolicyOptions } from '../
 import { Redactor } from '../core/redact.js';
 import {
   findConstraints,
+  laterSuccesses,
   protectionsFor,
   resolveRuleOptions,
   targetChangedLater,
@@ -171,6 +172,20 @@ export function removedCallsMarker(removed: readonly { call: ToolCall; archiveId
   return `[lossless-compact archived ${removed.length} tool call${removed.length === 1 ? '' : 's'} made here: ${items} — out of context; /lossless restore <id>]`;
 }
 
+/**
+ * The line appended to a failed result that stays in context when every later
+ * call that succeeded at the same thing was archived: without it the failure
+ * reads as the last word (seen live: a refused `cat` and a wrong-path Read
+ * kept, the Read that worked archived, and the model doubting values it had
+ * quoted from it).
+ */
+export function laterSuccessNote(retries: readonly { call: ToolCall; archiveId: string }[]): string {
+  const shown = retries.slice(0, 3);
+  const items = shown.map((r) => `${`${r.call.tool} ${inputSummary(r.call)}`.trim()} → ${r.archiveId}`).join('; ');
+  const more = retries.length > shown.length ? ` (+${retries.length - shown.length} more)` : '';
+  return `[lossless-compact: after this failed, ${items}${more} succeeded; archived out of context, /lossless restore <id>]`;
+}
+
 interface Applied {
   messages: Message[];
   archived: ArchiveRecord[];
@@ -280,13 +295,35 @@ export function applyActions(
     return pair.result?.id ?? pair.use.id;
   };
 
+  // A failure that stays in view while every later success at the same thing
+  // left it gets a line naming where that success is (`laterSuccessNote`).
+  const inView = (call: ToolCall): boolean => {
+    const decision = decisionOf.get(call.tool_use_id);
+    return !decision || toBaselineAction(decision.action) !== 'drop_call';
+  };
+  const notes = new Map<string, string>();
+  for (const call of calls) {
+    if (!call.isError || !inView(call)) continue;
+    const retries = laterSuccesses(call, calls);
+    if (retries.length === 0 || retries.some(inView)) continue;
+    const archiveIds = retries.map((retry) => {
+      const pair = ledger.interactions.get(retry.tool_use_id)!;
+      return { call: retry, archiveId: pair.result?.id ?? pair.use.id };
+    });
+    notes.set(call.tool_use_id, laterSuccessNote(archiveIds));
+  }
+  const noted = (text: string, toolUseId: string): string => {
+    const note = notes.get(toolUseId);
+    return note ? `${text}\n${note}` : text;
+  };
+
   const kept: Message[] = [];
   /** Marker-only messages by the calls they stand for, so adjacent ones merge into one line. */
   const markerRuns = new Map<Message, { call: ToolCall; archiveId: string }[]>();
   for (const message of messages) {
     const touched =
-      message.toolUses.some((tool) => decisionOf.has(tool.tool_use_id)) ||
-      (message.toolResults ?? []).some((result) => decisionOf.has(result.tool_use_id));
+      message.toolUses.some((tool) => decisionOf.has(tool.tool_use_id) || notes.has(tool.tool_use_id)) ||
+      (message.toolResults ?? []).some((result) => decisionOf.has(result.tool_use_id) || notes.has(result.tool_use_id));
     if (!touched) {
       kept.push(message);
       continue;
@@ -296,22 +333,22 @@ export function applyActions(
     for (const tool of message.toolUses) {
       const decision = decisionOf.get(tool.tool_use_id);
       const call = byUseId.get(tool.tool_use_id);
-      if (!decision || !call) {
+      let text = tool.text;
+      if (decision && call) {
+        const archiveId = archiveInteraction(call, decision);
+        if (toBaselineAction(decision.action) === 'drop_call') {
+          removed.push({ call, archiveId });
+          continue;
+        }
+        if (text !== undefined) text = stubResultText(text, call, decision.action, archiveId, options.headChars);
+      }
+      if (text !== undefined) text = noted(text, tool.tool_use_id);
+      if (text === tool.text) {
         toolUses.push(tool);
         continue;
       }
-      const baseline = toBaselineAction(decision.action);
-      const archiveId = archiveInteraction(call, decision);
-      if (baseline === 'drop_call') {
-        removed.push({ call, archiveId });
-        continue;
-      }
-      const text = stubResultText(tool.text ?? '', call, decision.action, archiveId, options.headChars);
-      if ((tool.text ?? '') === text) {
-        toolUses.push(tool);
-        continue;
-      }
-      const copy: ToolUse = { tool_use_id: tool.tool_use_id, tool: tool.tool, input: tool.input, text };
+      const copy: ToolUse = { tool_use_id: tool.tool_use_id, tool: tool.tool, input: tool.input };
+      if (text !== undefined) copy.text = text;
       if (tool.isError) copy.isError = true;
       toolUses.push(copy);
     }
@@ -319,14 +356,13 @@ export function applyActions(
     for (const result of message.toolResults ?? []) {
       const decision = decisionOf.get(result.tool_use_id);
       const call = byUseId.get(result.tool_use_id);
-      if (!decision || !call) {
-        toolResults.push(result);
-        continue;
+      let text = result.text;
+      if (decision && call) {
+        const archiveId = archiveInteraction(call, decision);
+        if (toBaselineAction(decision.action) === 'drop_call') continue;
+        text = stubResultText(result.text, call, decision.action, archiveId, options.headChars);
       }
-      const baseline = toBaselineAction(decision.action);
-      const archiveId = archiveInteraction(call, decision);
-      if (baseline === 'drop_call') continue;
-      const text = stubResultText(result.text, call, decision.action, archiveId, options.headChars);
+      text = noted(text, result.tool_use_id);
       if (text === result.text) {
         toolResults.push(result);
         continue;
