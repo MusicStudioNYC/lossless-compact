@@ -9,7 +9,7 @@
       "name": "lossless-compact",
       "source": "./",
       "description": "Lossless compaction for Claude Code: nothing is summarized; everything removed is archived verbatim and restorable by id. /lossless to inspect and restore.",
-      "version": "0.7.1",
+      "version": "0.7.2",
       "license": "MIT"
     }
   ]

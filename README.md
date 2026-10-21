@@ -58,6 +58,17 @@ lossless-compact keeps all six, word for word, and can still find every one
 of the 27 details afterward — because instead of deleting them, it archived
 them. Full methodology and numbers: [docs/evals.md](docs/evals.md).
 
+## Try it on your own chats
+
+Those are hand-built test cases. To see the same comparison on your own long
+chats, paste the prompt in [docs/trial.md](docs/trial.md) into a new Claude
+Code chat. It finds your longest chats that were never compacted, copies each
+one (the originals are only read), runs Claude's `/compact` on one copy and
+lossless-compact on the others, asks every copy the same questions about
+details from the chat, and opens a report with the answers side by side,
+the time and the cost. At the end it removes everything, or installs the
+plugin if you want it.
+
 ## Get it running (2 minutes)
 
 The easiest way: open a chat in Claude Code or Cursor and paste this in —

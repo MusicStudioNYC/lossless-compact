@@ -1,6 +1,6 @@
 {
   "name": "lossless-compact",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "Lossless compaction for coding agents: nothing summarized, everything removed archived verbatim with provenance and restorable by id (forked from fast-jev-compaction).",
   "type": "module",
   "license": "MIT",
@@ -29,7 +29,8 @@
     "capture": "tsx scripts/capture-sessions.ts",
     "adversarial": "tsx scripts/make-adversarial.ts",
     "prepack": "npm run build",
-    "charts": "tsx scripts/charts.ts"
+    "charts": "tsx scripts/charts.ts",
+    "trial": "tsx scripts/trial.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

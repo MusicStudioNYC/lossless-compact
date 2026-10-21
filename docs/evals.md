@@ -76,6 +76,11 @@ redacts secrets and writes `datasets/real/<project>--<session>/`. `datasets/real
 is git-ignored: it holds your own code and prompts. Label the interesting ones
 by hand (or with a model) before trusting fidelity numbers on them.
 
+`scripts/trial.ts` is the live version of the same comparison on real chats,
+meant for users: it copies sessions, runs Claude Code's real `/compact` and the
+plugin's real hook on the copies, and asks each compacted copy questions
+chosen (and locked) before compaction. See [trial.md](trial.md).
+
 ## Metrics
 
 Per case and mode: tokens before/after (the estimator in `src/state.ts`),
