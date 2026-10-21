@@ -138,6 +138,38 @@ describe('reviewKeepNothing', () => {
     expect(decisions).toEqual(['proceed', 'proceed', 'fallback', 'fallback']);
   });
 
+  it('reads the { isAnswered, text } replies of Claude Code 2.1.305', async () => {
+    const result = await firstRun();
+    const usage = { input_tokens: 6103, output_tokens: 766, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
+    const { $, asked, logs } = host({});
+    // As seen live on a headless /compact: the fork has nothing to fork, haiku answers.
+    $.model.fork = (async () => ({ isAnswered: false, reason: 'nothing-to-fork' })) as never;
+    $.model.complete = (async () => ({
+      isAnswered: true,
+      text: '{"verdict":"keep_some","keep":["t1"],"reason":"the port will be asked about"}',
+      usage,
+    })) as never;
+    const review = await reviewKeepNothing($, 's', transcript, { preserveRecentMessages: 2 }, result, 0.35, 0.1);
+    expect(review).toMatchObject({ decision: 'keep', keep: ['t1'] });
+    expect(review.why).toContain('haiku (user turns only) asked to keep t1');
+    expect(asked).toEqual([]);
+    expect(logs).toEqual([]);
+
+    // An answered fork in the same shape is read too.
+    const answered = host({});
+    answered.$.model.fork = (async () => ({ isAnswered: true, text: '{"verdict":"drop_all","keep":[],"reason":"done with them"}', usage })) as never;
+    const proceeded = await reviewKeepNothing(answered.$, 's', transcript, { preserveRecentMessages: 2 }, result, 0.35, 0.1);
+    expect(proceeded.decision).toBe('proceed');
+    expect(proceeded.why).toContain("the session's model (6869 tokens) read the conversation and agreed");
+
+    // A completion that did not answer says why, then asks.
+    const unanswered = host({ ask: async () => REVIEW_ANSWERS.summary });
+    unanswered.$.model.complete = (async () => ({ isAnswered: false, reason: 'api-error', usage })) as never;
+    const asked2 = await reviewKeepNothing(unanswered.$, 's', transcript, { preserveRecentMessages: 2 }, result, 0.35, 0.1);
+    expect(asked2.decision).toBe('fallback');
+    expect(unanswered.logs.some((l) => l.includes('completion unavailable (api-error)'))).toBe(true);
+  });
+
   it('falls back to the built-in summary when there is no model and no one to ask (headless)', async () => {
     const result = await firstRun();
     const { $, logs } = host({});

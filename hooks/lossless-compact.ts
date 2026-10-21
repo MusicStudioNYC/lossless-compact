@@ -701,10 +701,29 @@ export const REVIEW_ANSWERS = {
   summary: "Use Claude's summary instead",
 } as const;
 
+/**
+ * A model reply as the host hands it back. Claude Code 2.1.274 resolved
+ * `$.model.complete` to the text and `$.model.fork` to `{ text, usage }` or
+ * null; 2.1.305 resolves both to `{ isAnswered, text?, reason?, usage? }`,
+ * with `isAnswered: false` (and no text) where null used to be.
+ */
+type ModelReply =
+  | string
+  | { isAnswered?: boolean; text?: string; reason?: string; usage?: { input_tokens: number; output_tokens: number } }
+  | null;
+
+/** The reply's text, or undefined when the model did not answer (and why, for the log). */
+export function replyText(reply: ModelReply): { text?: string; reason?: string } {
+  if (typeof reply === 'string') return { text: reply };
+  if (!reply) return { reason: 'no reply' };
+  if (reply.isAnswered === false || typeof reply.text !== 'string') return { reason: reply.reason ?? 'no text in the reply' };
+  return { text: reply.text };
+}
+
 type ReviewHost = {
   model: {
-    fork: (request: { prompt: string }) => Promise<{ text: string; usage: { input_tokens: number; output_tokens: number } } | null>;
-    complete: (request: { model: string; prompt: string; maxTokens?: number }) => Promise<string>;
+    fork: (request: { prompt: string }) => Promise<ModelReply>;
+    complete: (request: { model: string; prompt: string; maxTokens?: number }) => Promise<ModelReply>;
   };
   ui: {
     ask: (question: string, options?: { options?: readonly string[]; header?: string }) => Promise<string>;
@@ -738,20 +757,26 @@ export async function reviewKeepNothing(
   let reviewer = '';
   try {
     const forked = await $.model.fork({ prompt: reviewQuestion(candidates, threshold) });
-    if (forked) {
-      verdict = parseReview(forked.text, ids);
-      reviewer = `the session's model (${forked.usage.input_tokens + forked.usage.output_tokens} tokens)`;
+    // Not answering is routine (a cold or headless session has nothing to fork).
+    const { text } = replyText(forked);
+    if (text !== undefined) {
+      verdict = parseReview(text, ids);
+      const usage = forked && typeof forked === 'object' ? forked.usage : undefined;
+      reviewer = usage ? `the session's model (${usage.input_tokens + usage.output_tokens} tokens)` : "the session's model";
     }
   } catch (error) {
     $.ui.log(`lossless-compact review: fork unavailable (${error instanceof Error ? error.message : String(error)})`);
   }
   if (!verdict) {
     try {
-      const text = await $.model.complete({
-        model: 'haiku',
-        prompt: reviewQuestionWithContext(messages, candidates, threshold),
-        maxTokens: 400,
-      });
+      const { text, reason } = replyText(
+        await $.model.complete({
+          model: 'haiku',
+          prompt: reviewQuestionWithContext(messages, candidates, threshold),
+          maxTokens: 400,
+        }),
+      );
+      if (text === undefined) throw new Error(reason);
       verdict = parseReview(text, ids);
       reviewer = 'haiku (user turns only)';
     } catch (error) {
