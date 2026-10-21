@@ -41,6 +41,26 @@ describe('rankRecords', () => {
     expect(ranked.find((r) => r.record.id === 'e_2')?.score ?? 0).toBeLessThan(0.34);
   });
 
+  it('orders distinctive matches by how much of the prompt they match, not by recency', () => {
+    // Seen live: a prompt naming two env keys from .env.example got a newer file
+    // read that matched one rare word, because both were floored to 0.5.
+    const dotenv = record('e_4', 'DATABASE_URL=postgres://shop@localhost:54329/shop_dev\nSTRIPE_WEBHOOK_TOLERANCE_SEC=420\n', {
+      toolName: 'Read',
+      metadata: { tool: 'Read', file_path: '.env.example' },
+    });
+    const later = record('e_40', 'export function connect(databaseUrl: string) { /* reads DATABASE_URL */ }', {
+      toolName: 'Read',
+      metadata: { tool: 'Read', file_path: 'src/db.ts' },
+    });
+    const ranked = rankRecords(
+      'Quick memory check about this conversation (tools are off for this question). In .env.example, what is STRIPE_WEBHOOK_TOLERANCE_SEC set to, and what database name does DATABASE_URL point at? If unsure, say you do not know.',
+      [...all, dotenv, later],
+    );
+    expect(ranked.find((r) => r.record.id === 'e_4')!.score).toBe(0.5);
+    expect(ranked[0]!.record.id).toBe('e_4');
+    expect(ranked.find((r) => r.record.id === 'e_40')?.score ?? 0).toBeGreaterThanOrEqual(0.5);
+  });
+
   it('does not treat a stem-derived match as distinctive', () => {
     const fail = record('e_3', 'FAIL src/hooks/queue-service.ts\n  ✕ retries on transient error');
     const ranked = rankRecords('Uploads are failing in production, please investigate.', [...all, fail]);

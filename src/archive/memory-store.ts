@@ -178,7 +178,7 @@ export function rankRecords(
   const weight = (term: string): number => emphasis(term) * Math.log(1 + records.length / (1 + (df.get(term) ?? 0)));
   let total = 0;
   for (const term of terms) total += weight(term);
-  const scored: { record: ArchiveRecord; score: number }[] = [];
+  const scored: { record: ArchiveRecord; score: number; share: number }[] = [];
   for (const item of indexed) {
     let hits = 0;
     let distinctive = false;
@@ -200,9 +200,14 @@ export function rankRecords(
     }
     if (hits === 0 || !anchored) continue;
     const share = Math.min(1, hits / total);
-    scored.push({ record: item.record, score: distinctive ? Math.max(0.5, share) : share });
+    scored.push({ record: item.record, score: distinctive ? Math.max(0.5, share) : share, share });
   }
-  return scored.sort((a, b) => b.score - a.score || b.record.seq - a.record.seq);
+  // The 0.5 floor lets a distinctive match clear the caller's threshold; it
+  // must not also flatten the order, or a newer record matching one rare term
+  // outranks an older one matching every term the prompt named.
+  return scored
+    .sort((a, b) => b.score - a.score || b.share - a.share || b.record.seq - a.record.seq)
+    .map(({ record, score }) => ({ record, score }));
 }
 
 /** Backwards-compatible single-record score against a bare term set (no rarity weighting). */
